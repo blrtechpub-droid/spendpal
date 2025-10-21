@@ -102,3 +102,11 @@ clear_firestore.sh
 functions/node_modules/
 functions/lib/
 functions/.DS_Store
+
+# App Store / Play Store Signing
+android/key.properties
+*.jks
+*.keystore
+*.p12
+*.mobileprovision
+*.certSigningRequest
