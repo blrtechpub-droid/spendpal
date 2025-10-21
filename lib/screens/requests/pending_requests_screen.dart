@@ -244,6 +244,28 @@ class _PendingRequestsScreenState extends State<PendingRequestsScreen>
           return const Center(child: CircularProgressIndicator(color: AppTheme.tealAccent));
         }
 
+        if (snapshot.hasError) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.error_outline, size: 64, color: Colors.red),
+                const SizedBox(height: 16),
+                Text(
+                  'Error loading invitations',
+                  style: TextStyle(color: AppTheme.secondaryText),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '${snapshot.error}',
+                  style: const TextStyle(color: Colors.red, fontSize: 12),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          );
+        }
+
         final invitations = snapshot.data ?? [];
 
         if (invitations.isEmpty) {
@@ -269,6 +291,12 @@ class _PendingRequestsScreenState extends State<PendingRequestsScreen>
           );
         }
 
+        // Debug: Print invitation count
+        debugPrint('Group Invitations loaded: ${invitations.length}');
+        for (var inv in invitations) {
+          debugPrint('  - Group: ${inv.groupId}, InvitedBy: ${inv.invitedBy}, Status: ${inv.status}');
+        }
+
         return ListView.builder(
           padding: const EdgeInsets.all(16),
           itemCount: invitations.length,
@@ -289,14 +317,52 @@ class _PendingRequestsScreenState extends State<PendingRequestsScreen>
       ]),
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
-          return const SizedBox.shrink();
+          // Still loading
+          return Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppTheme.cardBackground,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Center(
+              child: CircularProgressIndicator(color: AppTheme.tealAccent),
+            ),
+          );
         }
 
         final groupDoc = snapshot.data![0];
         final userDoc = snapshot.data![1];
 
+        // Debug: Check if documents exist
+        debugPrint('Group ${invitation.groupId} exists: ${groupDoc.exists}');
+        debugPrint('User ${invitation.invitedBy} exists: ${userDoc.exists}');
+
         if (!groupDoc.exists) {
-          return const SizedBox.shrink();
+          // Show error card instead of hiding
+          return Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppTheme.cardBackground,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.red),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Error: Group not found',
+                  style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Group ID: ${invitation.groupId}',
+                  style: const TextStyle(color: AppTheme.secondaryText, fontSize: 12),
+                ),
+              ],
+            ),
+          );
         }
 
         final groupData = groupDoc.data() as Map<String, dynamic>?;
