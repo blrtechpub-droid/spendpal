@@ -8,7 +8,9 @@ import 'package:spendpal/services/group_invitation_service.dart';
 import 'package:spendpal/theme/app_theme.dart';
 
 class PendingRequestsScreen extends StatefulWidget {
-  const PendingRequestsScreen({super.key});
+  final int initialTab; // 0 for Friend Requests, 1 for Group Invitations
+
+  const PendingRequestsScreen({super.key, this.initialTab = 0});
 
   @override
   State<PendingRequestsScreen> createState() => _PendingRequestsScreenState();
@@ -22,7 +24,11 @@ class _PendingRequestsScreenState extends State<PendingRequestsScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(
+      length: 2,
+      vsync: this,
+      initialIndex: widget.initialTab,
+    );
   }
 
   @override

@@ -7,6 +7,8 @@ import 'package:spendpal/screens/groups/group_home_screen.dart';
 import 'package:spendpal/models/group_model.dart';
 import 'package:spendpal/theme/app_theme.dart';
 import 'package:spendpal/services/balance_service.dart';
+import 'package:spendpal/screens/requests/pending_requests_screen.dart';
+import 'package:spendpal/services/group_invitation_service.dart';
 
 class GroupsScreen extends StatefulWidget {
   const GroupsScreen({Key? key}) : super(key: key);
@@ -67,6 +69,56 @@ class _GroupsScreenState extends State<GroupsScreen> {
             icon: const Icon(Icons.search, color: AppTheme.primaryText),
             onPressed: _navigateToSearch,
             tooltip: 'Search',
+          ),
+          // Group Invitations notification icon with badge
+          FutureBuilder<int>(
+            future: GroupInvitationService.getPendingInvitationCount(currentUserId),
+            builder: (context, snapshot) {
+              final count = snapshot.data ?? 0;
+              return Stack(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.notifications_outlined, color: AppTheme.primaryText),
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const PendingRequestsScreen(
+                            initialTab: 1, // Open Group Invitations tab
+                          ),
+                        ),
+                      );
+                    },
+                    tooltip: 'Notifications',
+                  ),
+                  if (count > 0)
+                    Positioned(
+                      right: 8,
+                      top: 8,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: const BoxDecoration(
+                          color: Colors.red,
+                          shape: BoxShape.circle,
+                        ),
+                        constraints: const BoxConstraints(
+                          minWidth: 16,
+                          minHeight: 16,
+                        ),
+                        child: Text(
+                          count > 9 ? '9+' : count.toString(),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            },
           ),
           IconButton(
             icon: const Icon(Icons.group_add, color: AppTheme.tealAccent),
