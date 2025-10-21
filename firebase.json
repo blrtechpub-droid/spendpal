@@ -1,0 +1,53 @@
+{
+  "firestore": {
+    "rules": "firestore.rules"
+  },
+  "storage": [
+    {
+      "bucket": "spendpal-app-blrtechpub.firebasestorage.app",
+      "rules": "storage.rules"
+    }
+  ],
+  "functions": {
+    "source": "functions"
+  },
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "spendpal-app-blrtechpub",
+          "appId": "1:525963188971:android:d2f44db944c605d2d33cae",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "ios": {
+        "default": {
+          "projectId": "spendpal-app-blrtechpub",
+          "appId": "1:525963188971:ios:db3412dbf4ed85d9d33cae",
+          "uploadDebugSymbols": false,
+          "fileOutput": "ios/Runner/GoogleService-Info.plist"
+        }
+      },
+      "macos": {
+        "default": {
+          "projectId": "spendpal-app-blrtechpub",
+          "appId": "1:525963188971:ios:db3412dbf4ed85d9d33cae",
+          "uploadDebugSymbols": false,
+          "fileOutput": "macos/Runner/GoogleService-Info.plist"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "spendpal-app-blrtechpub",
+          "configurations": {
+            "android": "1:525963188971:android:d2f44db944c605d2d33cae",
+            "ios": "1:525963188971:ios:db3412dbf4ed85d9d33cae",
+            "macos": "1:525963188971:ios:db3412dbf4ed85d9d33cae",
+            "web": "1:525963188971:web:87403baf9830c26dd33cae",
+            "windows": "1:525963188971:web:42e03d10272a4adfd33cae"
+          }
+        }
+      }
+    }
+  }
+}

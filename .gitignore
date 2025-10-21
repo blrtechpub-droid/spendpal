@@ -1,0 +1,104 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# The .vscode folder contains launch configuration and tasks you configure in
+# VS Code which you may wish to be included in version control, so this line
+# is commented out by default.
+#.vscode/
+
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+/build/
+/coverage/
+pubspec.lock
+
+# Symbolication related
+app.*.symbols
+
+# Obfuscation related
+app.*.map.json
+
+# Android Studio will place build artifacts here
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# Firebase sensitive files (DO NOT COMMIT)
+# Note: firebase_options.dart is safe to commit as it contains public config
+# But these files may contain sensitive keys:
+android/app/google-services.json
+ios/Runner/GoogleService-Info.plist
+.firebaserc
+
+# Environment variables and secrets
+.env
+.env.local
+.env.*.local
+*.key
+*.keystore
+*.jks
+
+# iOS specific
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+ios/Runner.xcworkspace/
+*.pbxuser
+!default.pbxuser
+*.mode1v3
+!default.mode1v3
+*.mode2v3
+!default.mode2v3
+*.perspectivev3
+!default.perspectivev3
+xcuserdata/
+
+# macOS specific
+.fvm/
+*.mode1v3
+*.mode2v3
+*.moved-aside
+*.pbxuser
+*.perspectivev3
+**/.symlinks/
+.generated/
+
+# Web specific
+*.dart.js
+*.info.json
+*.part
+*.stamp
+.dart_tool/
+
+# Local testing scripts
+clear_firestore.sh
+
+# Firebase Functions
+functions/node_modules/
+functions/lib/
+functions/.DS_Store

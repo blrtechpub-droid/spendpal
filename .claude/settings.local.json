@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(firebase functions:log -n 5)",
+      "Bash(firebase functions:log -n 10)",
+      "Bash(firebase functions:log -n 15)",
+      "Bash(firebase functions:log -n 20)",
+      "Bash(firebase functions:log --only parseBill -n 10)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

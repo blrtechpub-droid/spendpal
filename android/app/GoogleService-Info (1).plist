@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CLIENT_ID</key>
+	<string>525963188971-1soafb9oog98fsrj2ljm0v3u6j2svtv4.apps.googleusercontent.com</string>
+	<key>REVERSED_CLIENT_ID</key>
+	<string>com.googleusercontent.apps.525963188971-1soafb9oog98fsrj2ljm0v3u6j2svtv4</string>
+	<key>API_KEY</key>
+	<string>AIzaSyD_hlfs8TkYfjloyAV0UPVjWmk4KIwV61g</string>
+	<key>GCM_SENDER_ID</key>
+	<string>525963188971</string>
+	<key>PLIST_VERSION</key>
+	<string>1</string>
+	<key>BUNDLE_ID</key>
+	<string>com.blrtechpub.spendpal</string>
+	<key>PROJECT_ID</key>
+	<string>spendpal-app-blrtechpub</string>
+	<key>STORAGE_BUCKET</key>
+	<string>spendpal-app-blrtechpub.firebasestorage.app</string>
+	<key>IS_ADS_ENABLED</key>
+	<false></false>
+	<key>IS_ANALYTICS_ENABLED</key>
+	<false></false>
+	<key>IS_APPINVITE_ENABLED</key>
+	<true></true>
+	<key>IS_GCM_ENABLED</key>
+	<true></true>
+	<key>IS_SIGNIN_ENABLED</key>
+	<true></true>
+	<key>GOOGLE_APP_ID</key>
+	<string>1:525963188971:ios:276ab33c9eae6ff0d33cae</string>
+</dict>
+</plist>
