@@ -6,6 +6,7 @@ import 'package:spendpal/screens/groups/add_group_members_screen.dart';
 import 'package:spendpal/screens/expense/expense_detail_screen.dart';
 import 'package:intl/intl.dart';
 import 'package:spendpal/theme/app_theme.dart';
+import 'package:spendpal/widgets/FloatingButtons.dart';
 
 class GroupHomeScreen extends StatelessWidget {
   final GroupModel group;
@@ -540,6 +541,7 @@ class GroupHomeScreen extends StatelessWidget {
           );
         },
       ),
+      floatingActionButton: const FloatingButtons(),
     );
   }
 

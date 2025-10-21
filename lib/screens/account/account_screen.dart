@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:spendpal/screens/account/report_bug_screen.dart';
 
 class AccountScreen extends StatelessWidget {
-  const AccountScreen({Key? key}) : super(key: key);
+  const AccountScreen({super.key});
 
   Future<Map<String, dynamic>?> _getUserData() async {
     final currentUser = FirebaseAuth.instance.currentUser;
@@ -226,8 +227,11 @@ class AccountScreen extends StatelessWidget {
                 icon: Icons.bug_report,
                 title: 'Report a Bug',
                 onTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Bug report feature coming soon')),
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const ReportBugScreen(),
+                    ),
                   );
                 },
               ),
