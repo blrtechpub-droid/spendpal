@@ -6,6 +6,8 @@ import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:spendpal/theme/app_theme.dart';
 import 'package:spendpal/screens/expense/expense_detail_screen.dart';
 import 'package:spendpal/screens/expense/expense_screen.dart';
+import 'package:spendpal/screens/sms_expenses/sms_expenses_screen.dart';
+import 'package:spendpal/services/sms_expense_service.dart';
 
 class PersonalExpensesScreen extends StatefulWidget {
   const PersonalExpensesScreen({super.key});
@@ -174,6 +176,54 @@ class _PersonalExpensesScreenState extends State<PersonalExpensesScreen> {
           style: TextStyle(color: AppTheme.primaryText),
         ),
         actions: [
+          // SMS Expenses button with badge
+          FutureBuilder<int>(
+            future: SmsExpenseService.getPendingCount(),
+            builder: (context, snapshot) {
+              final pendingCount = snapshot.data ?? 0;
+              return Stack(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.message, color: AppTheme.primaryText),
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const SmsExpensesScreen(),
+                        ),
+                      );
+                    },
+                    tooltip: 'SMS Expenses',
+                  ),
+                  if (pendingCount > 0)
+                    Positioned(
+                      right: 8,
+                      top: 8,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: const BoxDecoration(
+                          color: AppTheme.errorColor,
+                          shape: BoxShape.circle,
+                        ),
+                        constraints: const BoxConstraints(
+                          minWidth: 16,
+                          minHeight: 16,
+                        ),
+                        child: Text(
+                          pendingCount > 99 ? '99+' : pendingCount.toString(),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.filter_list, color: AppTheme.primaryText),
             onPressed: () {
