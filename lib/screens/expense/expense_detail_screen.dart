@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import 'package:spendpal/screens/expense/expense_screen.dart';
+import 'package:spendpal/theme/app_theme.dart';
 
 class ExpenseDetailScreen extends StatelessWidget {
   final String expenseId;
@@ -70,8 +71,15 @@ class ExpenseDetailScreen extends StatelessWidget {
               final confirm = await showDialog<bool>(
                 context: context,
                 builder: (context) => AlertDialog(
-                  title: const Text('Delete Expense'),
-                  content: const Text('Are you sure you want to delete this expense?'),
+                  backgroundColor: AppTheme.cardBackground,
+                  title: const Text(
+                    'Delete Expense',
+                    style: TextStyle(color: AppTheme.primaryText),
+                  ),
+                  content: const Text(
+                    'Are you sure you want to delete this expense?',
+                    style: TextStyle(color: AppTheme.secondaryText),
+                  ),
                   actions: [
                     TextButton(
                       onPressed: () => Navigator.pop(context, false),
@@ -79,7 +87,10 @@ class ExpenseDetailScreen extends StatelessWidget {
                     ),
                     TextButton(
                       onPressed: () => Navigator.pop(context, true),
-                      child: const Text('Delete', style: TextStyle(color: Colors.red)),
+                      child: const Text(
+                        'Delete',
+                        style: TextStyle(color: AppTheme.errorColor),
+                      ),
                     ),
                   ],
                 ),

@@ -2,6 +2,24 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Session Management Protocol
+
+**IMPORTANT**: Before ending ANY session, when the user says "end session", "wrap up", "save progress", or "session summary":
+
+1. **Update** `.claude/session_summary.md` with:
+   - Date and session focus
+   - All completed tasks with ✅
+   - Files modified with specific line numbers
+   - Code snippets for key changes
+   - Build status
+   - Pending tasks or next steps
+
+2. **Read** `.claude/SESSION_WORKFLOW.md` for the template format
+
+3. **At session start**: When user asks "What did we work on last time?", read `.claude/session_summary.md` and provide a brief recap
+
+This ensures continuity across sessions and helps both user and assistant pick up exactly where work was left off.
+
 ## Project Overview
 
 SpendPal is a Flutter expense tracking application with social features for splitting expenses among friends and groups. The app uses Firebase for authentication (Google Sign-In) and Firestore for data persistence.
@@ -319,3 +337,204 @@ Firestore security rules enforce the invitation system:
 4. **Reversible**: Users can reject/leave at any time
 5. **Spam Protection**: Prevents unauthorized adds
 6. **Clear Communication**: Users know who invited them and when
+
+## Session Management and Recovery
+
+### Overview
+
+This project uses a comprehensive session management system to maintain continuity across work sessions, especially important when dealing with VS Code crashes, timeouts, or context switches.
+
+### Key Files for Session Continuity
+
+**`.claude/STATUS.md`** - Current project status and active tasks
+- Updated regularly with current work state
+- Contains build information, active tasks, and next steps
+- **Check this file first when resuming work after interruption**
+
+**`CLAUDE.md`** (this file) - Project context and guidelines
+- Persistent memory across all sessions
+- Contains architecture, patterns, and conventions
+- Automatically loaded by Claude Code
+
+**Git commit history** - Granular work tracking
+- Frequent commits with descriptive messages
+- Use `git log --oneline -10` to see recent progress
+
+### Session Recovery Protocol
+
+When resuming after a crash, timeout, or break:
+
+#### 1. Check Current State
+```bash
+# Read current status
+cat .claude/STATUS.md
+
+# Check recent commits
+git log --oneline -5
+
+# Verify working tree
+git status
+
+# Check current branch
+git branch --show-current
+```
+
+#### 2. Verify Environment
+```bash
+# Flutter health check
+flutter doctor
+
+# Firebase connection
+firebase projects:list
+
+# Check current version
+grep "version:" pubspec.yaml
+```
+
+#### 3. Verify Build State (if relevant)
+```bash
+# Check if release build exists
+ls -lh build/app/outputs/bundle/release/ 2>/dev/null
+
+# Check APK build
+ls -lh build/app/outputs/flutter-apk/ 2>/dev/null
+```
+
+#### 4. Resume in Claude Code
+```bash
+# Continue last conversation
+claude -c
+
+# Or resume specific session
+claude -r "<session-id>"
+
+# Then ask Claude to check status
+# Example: "Check .claude/STATUS.md and continue where we left off"
+```
+
+### Maintaining Continuity
+
+#### During Active Work
+
+**Update STATUS.md after:**
+- Completing major tasks or milestones
+- Making important architectural decisions
+- Before ending work sessions
+- After resolving critical bugs
+- Before/after major builds or deployments
+
+**Update CLAUDE.md (using `/memory`) for:**
+- New architectural patterns or conventions
+- Important project-wide decisions
+- New workflows or processes
+- Updated dependencies or configurations
+
+**Commit frequently with descriptive messages:**
+```bash
+# Good commit messages include context
+git commit -m "Build release v1.0.0+10 for Play Store internal testing
+
+- Cleaned build artifacts
+- Built signed app bundle (49MB)
+- Ready for upload to Play Console
+- Next: Add internal testers and deploy"
+```
+
+#### Best Practices
+
+1. **Update STATUS.md before finishing work**
+   - Mark current task as in-progress
+   - Note any blockers or waiting states
+   - List immediate next steps
+
+2. **Use descriptive WIP commits**
+   - Commit even incomplete work with "WIP:" prefix
+   - Helps track exactly where you left off
+   - Can be squashed later before merging
+
+3. **Document decisions immediately**
+   - Add important decisions to STATUS.md
+   - Update CLAUDE.md for project-wide changes
+   - Use TODO comments for deferred work
+
+4. **Leverage Claude Code tools**
+   - `/list-bugs` - Check open issues
+   - `/memory` - Quick access to update CLAUDE.md or STATUS.md
+   - Custom slash commands for project-specific tasks
+
+### Quick Recovery Commands
+
+```bash
+# Full status check after crash
+cat .claude/STATUS.md
+git log --oneline -5
+git status
+flutter doctor -v
+
+# Verify Firebase
+firebase projects:list
+firebase functions:log -n 5
+
+# Check build artifacts
+ls -lh build/app/outputs/bundle/release/
+ls -lh build/app/outputs/flutter-apk/
+
+# Verify signing (Android)
+ls -la android/app/upload-keystore.jks
+ls -la android/key.properties
+```
+
+### Current Project State Reference
+
+For the most current project status, always check:
+
+1. **`.claude/STATUS.md`** - Current tasks and build state
+2. **`git log`** - Recent changes and commits
+3. **`git status`** - Uncommitted changes
+4. **Play Store/App Store guides** in `.claude/` directory
+5. **Bug tracking** via `/list-bugs` or GitHub Issues
+
+### Context Preservation Strategy
+
+This project maintains context through:
+
+1. **Persistent Files** - STATUS.md, CLAUDE.md, documentation
+2. **Version Control** - Frequent, descriptive commits
+3. **Structured Documentation** - Guides in `.claude/` directory
+4. **Custom Commands** - Slash commands for common workflows
+5. **Bug Tracking Integration** - GitHub Issues sync
+
+### Emergency Recovery
+
+If all context is lost:
+
+```bash
+# 1. Check STATUS.md first
+cat .claude/STATUS.md
+
+# 2. Review recent work
+git log --oneline -10
+git diff HEAD~5..HEAD
+
+# 3. Check documentation
+ls -la .claude/
+cat PLAYSTORE_RELEASE.md
+cat ANDROID_SIGNING_AND_FIREBASE.md
+
+# 4. Verify environment
+flutter doctor -v
+firebase projects:list
+
+# 5. Check for builds
+find build -name "*.aab" -o -name "*.apk" -o -name "*.ipa"
+```
+
+### Tips for Claude Code Users
+
+- **Always read STATUS.md first** when starting a new session
+- **Update STATUS.md regularly** - it's your safety net
+- **Use `/memory`** to quickly update memory files
+- **Commit WIP work** before ending sessions
+- **Use descriptive commit messages** - they're your breadcrumbs
+- **Leverage custom slash commands** for repetitive tasks
+- **Check git log** if uncertain about recent changes

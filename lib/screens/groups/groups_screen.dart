@@ -8,6 +8,7 @@ import 'package:spendpal/models/group_model.dart';
 import 'package:spendpal/theme/app_theme.dart';
 import 'package:spendpal/services/balance_service.dart';
 import 'package:spendpal/screens/requests/pending_requests_screen.dart';
+import 'package:spendpal/widgets/empty_state_widget.dart';
 import 'package:spendpal/services/group_invitation_service.dart';
 
 class GroupsScreen extends StatefulWidget {
@@ -144,54 +145,17 @@ class _GroupsScreenState extends State<GroupsScreen> {
           final groups = snapshot.data?.docs ?? [];
 
           if (groups.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      color: AppTheme.tealAccent.withValues(alpha: 0.1),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.groups,
-                      size: 64,
-                      color: AppTheme.tealAccent,
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  const Text(
-                    'No groups yet',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: AppTheme.primaryText,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Create a group to start splitting expenses',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: AppTheme.secondaryText,
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  ElevatedButton.icon(
-                    icon: const Icon(Icons.add),
-                    label: const Text('Create Group'),
-                    style: AppTheme.primaryButtonStyle,
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => AddGroupScreen()),
-                      );
-                    },
-                  ),
-                ],
-              ),
+            return EmptyStateWidget(
+              icon: Icons.groups,
+              title: 'No groups yet',
+              subtitle: 'Create a group to start splitting expenses',
+              actionLabel: 'Create Group',
+              onActionPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => AddGroupScreen()),
+                );
+              },
             );
           }
 
@@ -203,37 +167,38 @@ class _GroupsScreenState extends State<GroupsScreen> {
               return ListView(
                 padding: const EdgeInsets.only(bottom: 100),
                 children: [
-                  // Overall Balance Summary
-                  Container(
-                    margin: const EdgeInsets.all(16),
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: AppTheme.cardBackground,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'Overall, you',
-                          style: TextStyle(
-                            color: AppTheme.primaryText,
-                            fontSize: 16,
+                  // Overall Balance Summary - only show if non-zero
+                  if (overallBalance.abs() >= 0.01)
+                    Container(
+                      margin: const EdgeInsets.all(16),
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: AppTheme.cardBackground,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Overall, you',
+                            style: TextStyle(
+                              color: AppTheme.primaryText,
+                              fontSize: 16,
+                            ),
                           ),
-                        ),
-                        Text(
-                          overallBalance < 0
-                              ? 'owe ₹${(-overallBalance).toStringAsFixed(2)}'
-                              : 'are owed ₹${overallBalance.toStringAsFixed(2)}',
-                          style: TextStyle(
-                            color: overallBalance < 0 ? Colors.orange : AppTheme.tealAccent,
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
+                          Text(
+                            overallBalance < 0
+                                ? 'owe ₹${(-overallBalance).toStringAsFixed(2)}'
+                                : 'are owed ₹${overallBalance.toStringAsFixed(2)}',
+                            style: TextStyle(
+                              color: overallBalance < 0 ? Colors.orange : AppTheme.tealAccent,
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
 
                   // Group Cards
                   ...groups.map((group) => _buildGroupCard(group, currentUserId)),
@@ -262,7 +227,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
                         child: Column(
                           children: [
                             ListTile(
-                              contentPadding: const EdgeInsets.all(16),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                               leading: Container(
                                 width: 56,
                                 height: 56,
@@ -303,8 +268,8 @@ class _GroupsScreenState extends State<GroupsScreen> {
                                 ),
                               ),
                             ),
-                            // Individual friend balances
-                            ...nonGroupBalances.entries.map((entry) {
+                            // Individual friend balances - only show non-zero
+                            ...nonGroupBalances.entries.where((entry) => entry.value.abs() >= 0.01).map((entry) {
                               return FutureBuilder<String>(
                                 future: BalanceService.getUserName(entry.key),
                                 builder: (context, nameSnapshot) {
@@ -319,13 +284,17 @@ class _GroupsScreenState extends State<GroupsScreen> {
                                     child: Row(
                                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                       children: [
-                                        Text(
-                                          balance < 0
-                                              ? 'You owe $name'
-                                              : '$name owes you',
-                                          style: const TextStyle(
-                                            color: AppTheme.secondaryText,
-                                            fontSize: 14,
+                                        Expanded(
+                                          child: Text(
+                                            balance < 0
+                                                ? 'You owe $name'
+                                                : '$name owes you',
+                                            style: const TextStyle(
+                                              color: AppTheme.secondaryText,
+                                              fontSize: 14,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                            maxLines: 1,
                                           ),
                                         ),
                                         Text(
@@ -351,29 +320,26 @@ class _GroupsScreenState extends State<GroupsScreen> {
 
                   // Settled groups message (placeholder)
                   Container(
-                    margin: const EdgeInsets.all(16),
-                    padding: const EdgeInsets.all(16),
+                    margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
                     child: Column(
                       children: [
                         Text(
-                          'Hiding groups that have been settled up over one month',
+                          'Hiding settled groups (>1 month)',
                           textAlign: TextAlign.center,
                           style: TextStyle(
-                            color: AppTheme.secondaryText,
-                            fontSize: 14,
+                            color: AppTheme.tertiaryText,
+                            fontSize: 12,
                           ),
                         ),
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 8),
                         OutlinedButton(
                           onPressed: () {
                             setState(() {
                               _showSettledGroups = !_showSettledGroups;
                             });
                           },
-                          style: OutlinedButton.styleFrom(
-                            side: const BorderSide(color: AppTheme.tealAccent),
-                            foregroundColor: AppTheme.tealAccent,
-                          ),
+                          style: AppTheme.secondaryButtonStyle,
                           child: Text(_showSettledGroups
                               ? 'Hide settled-up groups'
                               : 'Show settled-up groups'),
@@ -394,7 +360,6 @@ class _GroupsScreenState extends State<GroupsScreen> {
     final data = group.data() as Map<String, dynamic>;
     final groupName = data['name'] ?? 'Unnamed Group';
     final groupPhoto = data['photo'] ?? '';
-    final members = List<String>.from(data['members'] ?? []);
     final groupColor = _getGroupColor(groupName);
 
     return FutureBuilder<Map<String, double>>(
@@ -444,20 +409,33 @@ class _GroupsScreenState extends State<GroupsScreen> {
                     fontSize: 17,
                     fontWeight: FontWeight.w600,
                   ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
                 ),
-                subtitle: Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Text(
-                    netBalance < 0
-                        ? 'you owe ₹${(-netBalance).toStringAsFixed(2)}'
-                        : 'you are owed ₹${netBalance.toStringAsFixed(2)}',
-                    style: TextStyle(
-                      color: netBalance < 0 ? Colors.orange : AppTheme.tealAccent,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
+                subtitle: netBalance.abs() >= 0.01
+                    ? Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text(
+                          netBalance < 0
+                              ? 'you owe ₹${(-netBalance).toStringAsFixed(2)}'
+                              : 'you are owed ₹${netBalance.toStringAsFixed(2)}',
+                          style: TextStyle(
+                            color: netBalance < 0 ? Colors.orange : AppTheme.tealAccent,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      )
+                    : const Padding(
+                        padding: EdgeInsets.only(top: 4),
+                        child: Text(
+                          'settled up',
+                          style: TextStyle(
+                            color: AppTheme.secondaryText,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
                 onTap: () {
                   final groupModel = GroupModel.fromDocument(group);
                   Navigator.push(
@@ -469,8 +447,8 @@ class _GroupsScreenState extends State<GroupsScreen> {
                 },
               ),
 
-              // Individual member balances
-              ...balances.entries.map((entry) {
+              // Individual member balances - only show non-zero
+              ...balances.entries.where((entry) => entry.value.abs() >= 0.01).map((entry) {
                 return FutureBuilder<String>(
                   future: BalanceService.getUserName(entry.key),
                   builder: (context, nameSnapshot) {
@@ -485,13 +463,17 @@ class _GroupsScreenState extends State<GroupsScreen> {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text(
-                            balance < 0
-                                ? 'You owe $name'
-                                : '$name owes you',
-                            style: const TextStyle(
-                              color: AppTheme.secondaryText,
-                              fontSize: 14,
+                          Expanded(
+                            child: Text(
+                              balance < 0
+                                  ? 'You owe $name'
+                                  : '$name owes you',
+                              style: const TextStyle(
+                                color: AppTheme.secondaryText,
+                                fontSize: 14,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
                             ),
                           ),
                           Text(

@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.0+1
+version: 1.0.0+10
 
 environment:
   sdk: ^3.9.2
@@ -48,6 +48,7 @@ dependencies:
   cloud_firestore: ^6.0.2
   intl: ^0.18.1
   flutter_speed_dial: ^7.0.0
+  firebase_crashlytics: ^5.0.2
 
   # Bill parsing dependencies
   file_picker: ^8.1.6
@@ -56,8 +57,13 @@ dependencies:
   http: ^1.2.2
   path: ^1.9.1
   cached_network_image: ^3.4.1
+  shared_preferences: ^2.3.4
   cloud_functions: ^6.0.2
   flutter_slidable: ^3.1.1
+
+  # SMS parsing for automatic expense tracking
+  telephony: ^0.2.0
+  permission_handler: ^11.3.1
 
 dev_dependencies:
   flutter_test:
@@ -69,6 +75,16 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^5.0.0
+  flutter_launcher_icons: ^0.14.2
+
+# App Icon Configuration
+flutter_launcher_icons:
+  android: true
+  ios: false  # Set to true when ready for iOS
+  image_path: "assets/app_icon.png"
+  adaptive_icon_background: "assets/app_icon.png"  # Use same image for background
+  adaptive_icon_foreground: "assets/app_icon.png"  # Full icon without border
+  remove_alpha_ios: true
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

@@ -3,6 +3,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import 'package:spendpal/screens/expense/expense_detail_screen.dart';
+import 'package:spendpal/theme/app_theme.dart';
+import 'package:spendpal/widgets/empty_state_widget.dart';
 
 class ActivityScreen extends StatelessWidget {
   const ActivityScreen({Key? key}) : super(key: key);
@@ -27,17 +29,17 @@ class ActivityScreen extends StatelessWidget {
   Color _getCategoryBackgroundColor(String category) {
     switch (category.toLowerCase()) {
       case 'food':
-        return Colors.yellow.shade100;
+        return AppTheme.foodCategory.withValues(alpha: 0.2);
       case 'travel':
-        return Colors.blue.shade100;
+        return AppTheme.travelCategory.withValues(alpha: 0.2);
       case 'shopping':
-        return Colors.purple.shade100;
+        return AppTheme.shoppingCategory.withValues(alpha: 0.2);
       case 'maid':
-        return Colors.teal.shade100;
+        return AppTheme.maidCategory.withValues(alpha: 0.2);
       case 'cook':
-        return Colors.green.shade100;
+        return AppTheme.cookCategory.withValues(alpha: 0.2);
       default:
-        return Colors.grey.shade200;
+        return AppTheme.defaultCategory.withValues(alpha: 0.2);
     }
   }
 
@@ -82,16 +84,16 @@ class ActivityScreen extends StatelessWidget {
     final currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
 
     return Scaffold(
-      backgroundColor: const Color(0xFF1C1C1E),
+      backgroundColor: AppTheme.primaryBackground,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF1C1C1E),
+        backgroundColor: AppTheme.primaryBackground,
         title: const Text(
           'Recent activity',
-          style: TextStyle(color: Colors.white, fontSize: 20),
+          style: TextStyle(color: AppTheme.primaryText, fontSize: 20),
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.search, color: Colors.white),
+            icon: const Icon(Icons.search, color: AppTheme.primaryText),
             onPressed: () {
               // TODO: Implement search
             },
@@ -106,7 +108,7 @@ class ActivityScreen extends StatelessWidget {
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(
-              child: CircularProgressIndicator(color: Colors.teal),
+              child: CircularProgressIndicator(color: AppTheme.tealAccent),
             );
           }
 
@@ -115,11 +117,11 @@ class ActivityScreen extends StatelessWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.error, color: Colors.red, size: 48),
+                  const Icon(Icons.error, color: AppTheme.errorColor, size: 48),
                   const SizedBox(height: 16),
-                  Text(
+                  const Text(
                     'Error loading activities',
-                    style: TextStyle(color: Colors.grey[400]),
+                    style: TextStyle(color: AppTheme.secondaryText),
                   ),
                 ],
               ),
@@ -127,23 +129,10 @@ class ActivityScreen extends StatelessWidget {
           }
 
           if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.receipt_long, size: 64, color: Colors.grey),
-                  const SizedBox(height: 16),
-                  Text(
-                    'No activity yet',
-                    style: TextStyle(fontSize: 18, color: Colors.grey[400]),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Start adding expenses to see activity',
-                    style: TextStyle(fontSize: 14, color: Colors.grey[600]),
-                  ),
-                ],
-              ),
+            return const EmptyStateWidget(
+              icon: Icons.receipt_long,
+              title: 'No activity yet',
+              subtitle: 'Start adding expenses to see activity',
             );
           }
 
@@ -283,7 +272,7 @@ class ActivityScreen extends StatelessWidget {
                           ),
                           child: Icon(
                             _getCategoryIcon(category),
-                            color: Colors.grey[800],
+                            color: AppTheme.primaryText,
                             size: 28,
                           ),
                         ),
@@ -295,10 +284,10 @@ class ActivityScreen extends StatelessWidget {
                             width: 20,
                             height: 20,
                             decoration: BoxDecoration(
-                              color: isGetBack ? Colors.teal : Colors.orange,
+                              color: isGetBack ? AppTheme.tealAccent : AppTheme.orangeAccent,
                               shape: BoxShape.circle,
                               border: Border.all(
-                                color: const Color(0xFF1C1C1E),
+                                color: AppTheme.primaryBackground,
                                 width: 2,
                               ),
                             ),
@@ -309,20 +298,26 @@ class ActivityScreen extends StatelessWidget {
                     title: RichText(
                       text: TextSpan(
                         style: const TextStyle(
-                          color: Colors.white,
+                          color: AppTheme.primaryText,
                           fontSize: 15,
                         ),
                         children: [
                           TextSpan(text: activityText),
                           if (activitySubtext.isNotEmpty) ...[
+                            const TextSpan(
+                              text: ' ',
+                              style: TextStyle(color: AppTheme.secondaryText),
+                            ),
                             TextSpan(
-                              text: ' $activitySubtext',
-                              style: TextStyle(color: Colors.grey[400]),
+                              text: activitySubtext,
+                              style: const TextStyle(color: AppTheme.secondaryText),
                             ),
                           ],
                           const TextSpan(text: '.'),
                         ],
                       ),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 2,
                     ),
                     subtitle: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -332,7 +327,7 @@ class ActivityScreen extends StatelessWidget {
                           Text(
                             'You get back ₹${getBackAmount.toStringAsFixed(2)}',
                             style: const TextStyle(
-                              color: Colors.teal,
+                              color: AppTheme.tealAccent,
                               fontSize: 14,
                             ),
                           )
@@ -340,23 +335,23 @@ class ActivityScreen extends StatelessWidget {
                           Text(
                             'You owe ₹${currentUserShare.toStringAsFixed(2)}',
                             style: const TextStyle(
-                              color: Colors.orange,
+                              color: AppTheme.orangeAccent,
                               fontSize: 14,
                             ),
                           )
                         else
                           Text(
                             'You paid ₹${amount.toStringAsFixed(2)}',
-                            style: TextStyle(
-                              color: Colors.grey[500],
+                            style: const TextStyle(
+                              color: AppTheme.secondaryText,
                               fontSize: 14,
                             ),
                           ),
                         const SizedBox(height: 2),
                         Text(
                           relativeTime,
-                          style: TextStyle(
-                            color: Colors.grey[600],
+                          style: const TextStyle(
+                            color: AppTheme.tertiaryText,
                             fontSize: 12,
                           ),
                         ),

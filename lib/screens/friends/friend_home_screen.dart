@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import 'package:spendpal/screens/expense/expense_detail_screen.dart';
 import 'package:spendpal/screens/expense/expense_screen.dart';
+import 'package:spendpal/theme/app_theme.dart';
 
 class FriendHomeScreen extends StatelessWidget {
   final String friendId;
@@ -125,8 +126,8 @@ class FriendHomeScreen extends StatelessWidget {
                         }
 
                         return CircleAvatar(
-                          radius: 40,
-                          backgroundColor: Colors.orange,
+                          radius: AppTheme.avatarRadiusLarge,
+                          backgroundColor: AppTheme.orangeAccent,
                           backgroundImage: photoURL.isNotEmpty
                               ? NetworkImage(photoURL)
                               : null,
@@ -191,10 +192,7 @@ class FriendHomeScreen extends StatelessWidget {
               children: [
                 Expanded(
                   child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.orange,
-                      foregroundColor: Colors.white,
-                    ),
+                    style: AppTheme.warningButtonStyle,
                     onPressed: () {
                       // TODO: Implement settle up
                       ScaffoldMessenger.of(context).showSnackBar(
@@ -207,10 +205,7 @@ class FriendHomeScreen extends StatelessWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: OutlinedButton(
-                    style: OutlinedButton.styleFrom(
-                      side: const BorderSide(color: Colors.white),
-                      foregroundColor: Colors.white,
-                    ),
+                    style: AppTheme.secondaryButtonStyle,
                     onPressed: () {
                       Navigator.push(
                         context,
@@ -390,6 +385,8 @@ class FriendHomeScreen extends StatelessWidget {
                                     fontWeight: FontWeight.w500,
                                     color: Colors.white,
                                   ),
+                                  overflow: TextOverflow.ellipsis,
+                                  maxLines: 1,
                                 ),
                                 subtitle: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -398,6 +395,8 @@ class FriendHomeScreen extends StatelessWidget {
                                       Text(
                                         '${DateFormat('MMM dd').format(date)} • $paidByName paid ₹${amount.toStringAsFixed(2)}',
                                         style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                                        overflow: TextOverflow.ellipsis,
+                                        maxLines: 1,
                                       ),
                                   ],
                                 ),

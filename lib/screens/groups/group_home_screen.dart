@@ -94,6 +94,8 @@ class GroupHomeScreen extends StatelessWidget {
         title: Text(
           group.name,
           style: const TextStyle(color: AppTheme.primaryText),
+          overflow: TextOverflow.ellipsis,
+          maxLines: 1,
         ),
         actions: [
           IconButton(
@@ -286,10 +288,7 @@ class GroupHomeScreen extends StatelessWidget {
                   children: [
                     Expanded(
                       child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.orange,
-                          foregroundColor: Colors.white,
-                        ),
+                        style: AppTheme.warningButtonStyle,
                         onPressed: () {
                           // TODO: Implement settle up
                           ScaffoldMessenger.of(context).showSnackBar(
@@ -486,6 +485,8 @@ class GroupHomeScreen extends StatelessWidget {
                                         color: AppTheme.primaryText,
                                         fontSize: 16,
                                       ),
+                                      overflow: TextOverflow.ellipsis,
+                                      maxLines: 1,
                                     ),
                                     subtitle: Column(
                                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -497,6 +498,8 @@ class GroupHomeScreen extends StatelessWidget {
                                               fontSize: 13,
                                               color: AppTheme.secondaryText,
                                             ),
+                                            overflow: TextOverflow.ellipsis,
+                                            maxLines: 1,
                                           ),
                                         if (splitDetails.length > 1)
                                           Text(
@@ -541,7 +544,14 @@ class GroupHomeScreen extends StatelessWidget {
           );
         },
       ),
-      floatingActionButton: const FloatingButtons(),
+      floatingActionButton: FloatingButtons(
+        onAddExpense: () {
+          Navigator.pushNamed(context, '/add_expense');
+        },
+        onScan: () {
+          Navigator.pushNamed(context, '/scan_qr');
+        },
+      ),
     );
   }
 

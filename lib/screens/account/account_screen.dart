@@ -2,9 +2,32 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:spendpal/screens/account/report_bug_screen.dart';
+import 'package:spendpal/screens/account/currency_selection_screen.dart';
+import 'package:spendpal/services/currency_service.dart';
+import 'package:spendpal/theme/app_theme.dart';
 
-class AccountScreen extends StatelessWidget {
+class AccountScreen extends StatefulWidget {
   const AccountScreen({super.key});
+
+  @override
+  State<AccountScreen> createState() => _AccountScreenState();
+}
+
+class _AccountScreenState extends State<AccountScreen> {
+  Currency? _selectedCurrency;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSelectedCurrency();
+  }
+
+  Future<void> _loadSelectedCurrency() async {
+    final currency = await CurrencyService.getSelectedCurrency();
+    setState(() {
+      _selectedCurrency = currency;
+    });
+  }
 
   Future<Map<String, dynamic>?> _getUserData() async {
     final currentUser = FirebaseAuth.instance.currentUser;
@@ -22,11 +45,11 @@ class AccountScreen extends StatelessWidget {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF2C2C2E),
-        title: const Text('Sign Out', style: TextStyle(color: Colors.white)),
+        backgroundColor: AppTheme.cardBackground,
+        title: const Text('Sign Out', style: TextStyle(color: AppTheme.primaryText)),
         content: const Text(
           'Are you sure you want to sign out?',
-          style: TextStyle(color: Colors.white70),
+          style: TextStyle(color: AppTheme.secondaryText),
         ),
         actions: [
           TextButton(
@@ -35,7 +58,7 @@ class AccountScreen extends StatelessWidget {
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Sign Out', style: TextStyle(color: Colors.red)),
+            child: const Text('Sign Out', style: TextStyle(color: AppTheme.errorColor)),
           ),
         ],
       ),
@@ -54,10 +77,10 @@ class AccountScreen extends StatelessWidget {
     final currentUser = FirebaseAuth.instance.currentUser;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF1C1C1E),
+      backgroundColor: AppTheme.primaryBackground,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF1C1C1E),
-        title: const Text('Account', style: TextStyle(color: Colors.white)),
+        backgroundColor: AppTheme.primaryBackground,
+        title: const Text('Account', style: TextStyle(color: AppTheme.primaryText)),
         automaticallyImplyLeading: false,
       ),
       body: FutureBuilder<Map<String, dynamic>?>(
@@ -80,8 +103,8 @@ class AccountScreen extends StatelessWidget {
                 child: Column(
                   children: [
                     CircleAvatar(
-                      radius: 50,
-                      backgroundColor: Colors.teal,
+                      radius: AppTheme.avatarRadiusLarge,
+                      backgroundColor: AppTheme.tealAccent,
                       backgroundImage: photoURL.isNotEmpty
                           ? NetworkImage(photoURL)
                           : null,
@@ -89,7 +112,7 @@ class AccountScreen extends StatelessWidget {
                           ? Text(
                               name.substring(0, 1).toUpperCase(),
                               style: const TextStyle(
-                                color: Colors.white,
+                                color: AppTheme.primaryText,
                                 fontSize: 36,
                                 fontWeight: FontWeight.bold,
                               ),
@@ -100,7 +123,7 @@ class AccountScreen extends StatelessWidget {
                     Text(
                       name,
                       style: const TextStyle(
-                        color: Colors.white,
+                        color: AppTheme.primaryText,
                         fontSize: 24,
                         fontWeight: FontWeight.bold,
                       ),
@@ -109,15 +132,15 @@ class AccountScreen extends StatelessWidget {
                     Text(
                       email,
                       style: const TextStyle(
-                        color: Colors.white70,
+                        color: AppTheme.secondaryText,
                         fontSize: 14,
                       ),
                     ),
                     const SizedBox(height: 16),
                     OutlinedButton.icon(
                       style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: Colors.white),
-                        foregroundColor: Colors.white,
+                        side: const BorderSide(color: AppTheme.primaryText),
+                        foregroundColor: AppTheme.primaryText,
                       ),
                       onPressed: () {
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -131,7 +154,7 @@ class AccountScreen extends StatelessWidget {
                 ),
               ),
 
-              const Divider(color: Colors.grey, height: 1),
+              const Divider(color: AppTheme.dividerColor, height: 1),
 
               // Settings Section
               _buildSectionHeader('Settings'),
@@ -150,11 +173,22 @@ class AccountScreen extends StatelessWidget {
                 context,
                 icon: Icons.currency_rupee,
                 title: 'Currency',
-                subtitle: 'INR (₹)',
-                onTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Currency settings coming soon')),
+                subtitle: _selectedCurrency != null
+                    ? '${_selectedCurrency!.code} (${_selectedCurrency!.symbol})'
+                    : 'INR (₹)',
+                onTap: () async {
+                  final result = await Navigator.push<Currency>(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const CurrencySelectionScreen(),
+                    ),
                   );
+
+                  if (result != null) {
+                    setState(() {
+                      _selectedCurrency = result;
+                    });
+                  }
                 },
               ),
               _buildListTile(
@@ -180,7 +214,7 @@ class AccountScreen extends StatelessWidget {
                 },
               ),
 
-              const Divider(color: Colors.grey, height: 1),
+              const Divider(color: AppTheme.dividerColor, height: 1),
 
               // Data & Privacy Section
               _buildSectionHeader('Data & Privacy'),
@@ -205,10 +239,10 @@ class AccountScreen extends StatelessWidget {
                     const SnackBar(content: Text('Delete account feature coming soon')),
                   );
                 },
-                textColor: Colors.red,
+                textColor: AppTheme.errorColor,
               ),
 
-              const Divider(color: Colors.grey, height: 1),
+              const Divider(color: AppTheme.dividerColor, height: 1),
 
               // Help & Support Section
               _buildSectionHeader('Help & Support'),
@@ -246,7 +280,7 @@ class AccountScreen extends StatelessWidget {
                 },
               ),
 
-              const Divider(color: Colors.grey, height: 1),
+              const Divider(color: AppTheme.dividerColor, height: 1),
 
               // About Section
               _buildSectionHeader('About'),
@@ -278,15 +312,15 @@ class AccountScreen extends StatelessWidget {
                 },
               ),
 
-              const Divider(color: Colors.grey, height: 1),
+              const Divider(color: AppTheme.dividerColor, height: 1),
 
               // Sign Out Button
               Padding(
                 padding: const EdgeInsets.all(20),
                 child: ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.red,
-                    foregroundColor: Colors.white,
+                    backgroundColor: AppTheme.errorColor,
+                    foregroundColor: AppTheme.primaryText,
                     padding: const EdgeInsets.symmetric(vertical: 12),
                   ),
                   onPressed: () => _signOut(context),
@@ -301,8 +335,8 @@ class AccountScreen extends StatelessWidget {
                 child: Text(
                   'SpendPal - Split expenses with friends\nMade with ❤️',
                   textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: Colors.grey[600],
+                  style: const TextStyle(
+                    color: AppTheme.tertiaryText,
                     fontSize: 12,
                   ),
                 ),
@@ -320,7 +354,7 @@ class AccountScreen extends StatelessWidget {
       child: Text(
         title,
         style: const TextStyle(
-          color: Colors.grey,
+          color: AppTheme.secondaryText,
           fontSize: 14,
           fontWeight: FontWeight.bold,
         ),
@@ -337,22 +371,22 @@ class AccountScreen extends StatelessWidget {
     Color? textColor,
   }) {
     return ListTile(
-      leading: Icon(icon, color: textColor ?? Colors.white70),
+      leading: Icon(icon, color: textColor ?? AppTheme.secondaryText),
       title: Text(
         title,
         style: TextStyle(
-          color: textColor ?? Colors.white,
+          color: textColor ?? AppTheme.primaryText,
           fontSize: 16,
         ),
       ),
       subtitle: subtitle != null
           ? Text(
               subtitle,
-              style: const TextStyle(color: Colors.white70, fontSize: 14),
+              style: const TextStyle(color: AppTheme.secondaryText, fontSize: 14),
             )
           : null,
       trailing: onTap != null
-          ? const Icon(Icons.chevron_right, color: Colors.white70)
+          ? const Icon(Icons.chevron_right, color: AppTheme.secondaryText)
           : null,
       onTap: onTap,
     );

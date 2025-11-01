@@ -1,0 +1,6 @@
+# Session summaries (keep local, don't commit)
+session_summary.md
+archives/
+
+# But do commit the workflow template
+!SESSION_WORKFLOW.md
