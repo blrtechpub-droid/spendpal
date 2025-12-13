@@ -128,7 +128,8 @@ class _TransactionReviewScreenState extends State<TransactionReviewScreen> {
           'date': Timestamp.fromDate(transaction.parsedDate ?? DateTime.now()),
           'notes': transaction.notes ?? '',
           'category': transaction.category,
-          'tags': [],
+          'source': 'statement', // Mark as statement-sourced for Statements tab
+          'tags': ['statement'], // Add statement tag for filtering
           'billImageUrl': widget.billImageUrl,
           'isFromBill': true,
           'billMetadata': {

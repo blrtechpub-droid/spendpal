@@ -9,8 +9,15 @@ import 'package:spendpal/services/group_invitation_service.dart';
 import 'package:spendpal/theme/app_theme.dart';
 import 'package:spendpal/widgets/empty_state_widget.dart';
 
-class FriendsScreen extends StatelessWidget {
+class FriendsScreen extends StatefulWidget {
   const FriendsScreen({Key? key}) : super(key: key);
+
+  @override
+  State<FriendsScreen> createState() => _FriendsScreenState();
+}
+
+class _FriendsScreenState extends State<FriendsScreen> {
+  bool _showSettledFriends = false;
 
   void _navigateToAddFriend(BuildContext context) {
     Navigator.push(
@@ -122,6 +129,8 @@ class FriendsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final currentUser = FirebaseAuth.instance.currentUser;
+    final theme = Theme.of(context);
+
     if (currentUser == null) {
       return const Scaffold(
         body: Center(child: Text('Please log in')),
@@ -129,13 +138,12 @@ class FriendsScreen extends StatelessWidget {
     }
 
     return Scaffold(
-      backgroundColor: AppTheme.primaryBackground,
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: AppTheme.primaryBackground,
-        title: const Text("Friends", style: TextStyle(color: AppTheme.primaryText)),
+        title: const Text("Friends"),
         actions: [
           IconButton(
-            icon: const Icon(Icons.search, color: AppTheme.primaryText),
+            icon: const Icon(Icons.search),
             onPressed: () {
               // TODO: Implement search
             },
@@ -148,7 +156,7 @@ class FriendsScreen extends StatelessWidget {
               return Stack(
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.notifications_outlined, color: AppTheme.primaryText),
+                    icon: const Icon(Icons.notifications_outlined),
                     onPressed: () {
                       Navigator.push(
                         context,
@@ -164,8 +172,8 @@ class FriendsScreen extends StatelessWidget {
                       top: 8,
                       child: Container(
                         padding: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(
-                          color: AppTheme.errorColor,
+                        decoration: const BoxDecoration(
+                          color: Colors.red,
                           shape: BoxShape.circle,
                         ),
                         constraints: const BoxConstraints(
@@ -175,7 +183,7 @@ class FriendsScreen extends StatelessWidget {
                         child: Text(
                           count > 9 ? '9+' : count.toString(),
                           style: const TextStyle(
-                            color: AppTheme.primaryText,
+                            color: Color(0xFFF8F8F8),
                             fontSize: 10,
                             fontWeight: FontWeight.bold,
                           ),
@@ -188,7 +196,7 @@ class FriendsScreen extends StatelessWidget {
             },
           ),
           IconButton(
-            icon: const Icon(Icons.person_add, color: AppTheme.primaryText),
+            icon: Icon(Icons.person_add, color: theme.colorScheme.primary),
             onPressed: () => _navigateToAddFriend(context),
           ),
         ],
@@ -204,7 +212,7 @@ class FriendsScreen extends StatelessWidget {
           }
 
           if (!userSnapshot.hasData || !userSnapshot.data!.exists) {
-            return const Center(child: Text('User not found', style: TextStyle(color: AppTheme.primaryText)));
+            return Center(child: Text('User not found', style: TextStyle(color: theme.textTheme.bodyLarge?.color)));
           }
 
           // Now fetch friends with balances whenever user data changes
@@ -242,49 +250,66 @@ class FriendsScreen extends StatelessWidget {
             children: [
               // Overall Balance Header
               Container(
+                margin: const EdgeInsets.all(16),
                 padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: overallBalance > 0
+                        ? [Colors.green[400]!, Colors.green[700]!]
+                        : overallBalance < 0
+                            ? [Colors.orange[400]!, Colors.deepOrange[600]!]
+                            : [Colors.grey[400]!, Colors.grey[600]!],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: (overallBalance > 0
+                              ? Colors.green
+                              : overallBalance < 0
+                                  ? Colors.orange
+                                  : Colors.grey)
+                          .withValues(alpha: 0.3),
+                      blurRadius: 12,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
+                ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          overallBalance > 0
-                              ? 'Overall, you are owed'
-                              : overallBalance < 0
-                                  ? 'Overall, you owe'
-                                  : 'Overall, you are settled up',
-                          style: const TextStyle(
-                            color: AppTheme.secondaryText,
-                            fontSize: 14,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          '₹${overallBalance.abs().toStringAsFixed(2)}',
-                          style: TextStyle(
-                            color: overallBalance > 0
-                                ? AppTheme.greenAccent
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            overallBalance > 0
+                                ? 'Overall, you are owed'
                                 : overallBalance < 0
-                                    ? AppTheme.orangeAccent
-                                    : AppTheme.secondaryText,
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
+                                    ? 'Overall, you owe'
+                                    : 'Overall, you are settled up',
+                            style: const TextStyle(
+                              color: Color(0xFFF8F8F8),
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.tune, color: AppTheme.primaryText),
-                      onPressed: () {
-                        // TODO: Implement filter
-                      },
+                          const SizedBox(height: 8),
+                          Text(
+                            '₹${overallBalance.abs().toStringAsFixed(2)}',
+                            style: const TextStyle(
+                              color: Color(0xFFF8F8F8),
+                              fontSize: 32,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
               ),
-              const Divider(color: AppTheme.dividerColor, height: 1),
               // Friends List
               Expanded(
                 child: ListView(
@@ -292,56 +317,35 @@ class FriendsScreen extends StatelessWidget {
                     // Unsettled friends
                     ...unsettledFriends.map((friend) => _buildFriendTile(context, friend)),
 
-                    // Settled friends section
+                    // Settled friends toggle button
                     if (settledFriends.isNotEmpty) ...[
-                      const SizedBox(height: 20),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Text(
-                          'Hiding friends that have been settled up over one month.',
-                          style: const TextStyle(
-                            color: AppTheme.tertiaryText,
-                            fontSize: 12,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 16),
                       Center(
-                        child: OutlinedButton(
-                          style: OutlinedButton.styleFrom(
-                            side: const BorderSide(color: AppTheme.dividerColor),
-                            foregroundColor: AppTheme.primaryText,
-                          ),
+                        child: ElevatedButton.icon(
                           onPressed: () {
-                            // TODO: Show settled friends
-                            showDialog(
-                              context: context,
-                              builder: (context) => AlertDialog(
-                                backgroundColor: AppTheme.cardBackground,
-                                title: const Text(
-                                  'Settled Friends',
-                                  style: TextStyle(color: AppTheme.primaryText),
-                                ),
-                                content: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: settledFriends
-                                      .map((friend) => _buildFriendTile(context, friend))
-                                      .toList(),
-                                ),
-                                actions: [
-                                  TextButton(
-                                    onPressed: () => Navigator.pop(context),
-                                    child: const Text('Close'),
-                                  ),
-                                ],
-                              ),
-                            );
+                            setState(() {
+                              _showSettledFriends = !_showSettledFriends;
+                            });
                           },
-                          child: Text('Show ${settledFriends.length} settled-up friends'),
+                          icon: Icon(
+                            _showSettledFriends ? Icons.visibility_off : Icons.visibility,
+                            size: 18,
+                          ),
+                          label: Text(_showSettledFriends
+                              ? 'Hide settled-up friends'
+                              : 'Show settled-up friends'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green[100],
+                            foregroundColor: Colors.green[700],
+                            elevation: 0,
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                          ),
                         ),
                       ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 16),
+                      // Show settled friends when toggled
+                      if (_showSettledFriends)
+                        ...settledFriends.map((friend) => _buildFriendTile(context, friend)),
                     ],
                   ],
                 ),
@@ -356,6 +360,7 @@ class FriendsScreen extends StatelessWidget {
 }
 
   Widget _buildFriendTile(BuildContext context, Map<String, dynamic> friend) {
+    final theme = Theme.of(context);
     final nickname = friend['nickname'];
     final name = friend['name'] ?? 'Unnamed';
     final displayName = nickname != null && nickname.isNotEmpty ? nickname : name;
@@ -366,8 +371,8 @@ class FriendsScreen extends StatelessWidget {
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       leading: CircleAvatar(
-        radius: AppTheme.avatarRadiusMedium,
-        backgroundColor: AppTheme.orangeAccent,
+        radius: 28,
+        backgroundColor: theme.colorScheme.primary,
         backgroundImage: friend['photoURL'] != null && friend['photoURL'] != ''
             ? NetworkImage(friend['photoURL'])
             : null,
@@ -375,7 +380,7 @@ class FriendsScreen extends StatelessWidget {
             ? Text(
                 displayName.substring(0, 1).toUpperCase(),
                 style: const TextStyle(
-                  color: AppTheme.primaryText,
+                  color: Color(0xFFF8F8F8),
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
                 ),
@@ -384,8 +389,8 @@ class FriendsScreen extends StatelessWidget {
       ),
       title: Text(
         displayName,
-        style: const TextStyle(
-          color: AppTheme.primaryText,
+        style: TextStyle(
+          color: theme.textTheme.bodyLarge?.color,
           fontSize: 16,
           fontWeight: FontWeight.w500,
         ),
@@ -393,14 +398,14 @@ class FriendsScreen extends StatelessWidget {
         maxLines: 1,
       ),
       subtitle: isSettled
-          ? const Text(
+          ? Text(
               'settled up',
-              style: TextStyle(color: AppTheme.secondaryText, fontSize: 12),
+              style: TextStyle(color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7), fontSize: 12),
             )
           : Text(
               owesYou ? 'owes you' : 'you owe',
               style: TextStyle(
-                color: owesYou ? AppTheme.greenAccent : AppTheme.orangeAccent,
+                color: owesYou ? Colors.green : Colors.orange,
                 fontSize: 12,
               ),
             ),
@@ -409,7 +414,7 @@ class FriendsScreen extends StatelessWidget {
           : Text(
               '₹${balance.abs().toStringAsFixed(2)}',
               style: TextStyle(
-                color: owesYou ? AppTheme.greenAccent : AppTheme.orangeAccent,
+                color: owesYou ? Colors.green : Colors.orange,
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
               ),

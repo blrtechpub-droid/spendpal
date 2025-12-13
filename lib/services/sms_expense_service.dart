@@ -18,9 +18,18 @@ class SmsExpenseService {
         .where('status', isEqualTo: 'pending')
         .orderBy('date', descending: true)
         .snapshots()
+        .handleError((error) {
+          print('Error loading SMS expenses: $error');
+          // Return empty list on error instead of breaking the stream
+          return [];
+        })
         .map((snapshot) => snapshot.docs
             .map((doc) => SmsExpenseModel.fromDocument(doc))
-            .toList());
+            .toList())
+        .handleError((error) {
+          print('Error parsing SMS expenses: $error');
+          return <SmsExpenseModel>[];
+        });
   }
 
   /// Get count of pending SMS expenses
@@ -87,6 +96,55 @@ class SmsExpenseService {
       return expenseDoc.id;
     } catch (e) {
       print('Error categorizing SMS expense as personal: $e');
+      return null;
+    }
+  }
+
+  /// Categorize SMS expense as salary (add to Money Tracker)
+  static Future<String?> categorizeAsSalary(SmsExpenseModel smsExpense) async {
+    try {
+      final currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser == null) {
+        throw Exception('User not logged in');
+      }
+
+      // Extract month and year from transaction date
+      final date = smsExpense.date;
+      final month = date.month;
+      final year = date.year;
+
+      // Create salary record in salaryRecords collection
+      final salaryData = {
+        'userId': currentUser.uid,
+        'amount': smsExpense.amount,
+        'month': month,
+        'year': year,
+        'source': 'sms', // Mark as auto-imported from SMS
+        'notes': 'Auto-imported from SMS\n${smsExpense.merchant}\nAccount: ${smsExpense.accountInfo ?? "N/A"}\nTxn: ${smsExpense.transactionId ?? "N/A"}',
+        'smsMetadata': {
+          'sender': smsExpense.smsSender,
+          'rawSms': smsExpense.rawSms,
+          'transactionId': smsExpense.transactionId,
+          'accountInfo': smsExpense.accountInfo,
+          'parsedAt': Timestamp.fromDate(smsExpense.parsedAt),
+          'smsExpenseId': smsExpense.id,
+          'transactionDate': Timestamp.fromDate(date),
+        },
+        'createdAt': FieldValue.serverTimestamp(),
+      };
+
+      final salaryDoc = await _firestore.collection('salaryRecords').add(salaryData);
+
+      // Update SMS expense status
+      await _firestore.collection('sms_expenses').doc(smsExpense.id).update({
+        'status': 'categorized',
+        'categorizedAt': FieldValue.serverTimestamp(),
+        'linkedExpenseId': salaryDoc.id, // Link to salary record
+      });
+
+      return salaryDoc.id;
+    } catch (e) {
+      print('Error categorizing SMS expense as salary: $e');
       return null;
     }
   }

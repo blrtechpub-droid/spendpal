@@ -46,19 +46,20 @@ class ExpenseDetailScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: Colors.black,
+        backgroundColor: theme.scaffoldBackgroundColor,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          icon: Icon(Icons.arrow_back, color: theme.textTheme.bodyLarge?.color),
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.camera_alt, color: Colors.white),
+            icon: Icon(Icons.camera_alt, color: theme.textTheme.bodyLarge?.color),
             onPressed: () {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('Add receipt photo')),
@@ -66,19 +67,20 @@ class ExpenseDetailScreen extends StatelessWidget {
             },
           ),
           IconButton(
-            icon: const Icon(Icons.delete, color: Colors.white),
+            icon: Icon(Icons.delete, color: theme.textTheme.bodyLarge?.color),
             onPressed: () async {
+              final dialogTheme = Theme.of(context);
               final confirm = await showDialog<bool>(
                 context: context,
                 builder: (context) => AlertDialog(
-                  backgroundColor: AppTheme.cardBackground,
-                  title: const Text(
+                  backgroundColor: dialogTheme.cardTheme.color,
+                  title: Text(
                     'Delete Expense',
-                    style: TextStyle(color: AppTheme.primaryText),
+                    style: TextStyle(color: dialogTheme.textTheme.bodyLarge?.color),
                   ),
-                  content: const Text(
+                  content: Text(
                     'Are you sure you want to delete this expense?',
-                    style: TextStyle(color: AppTheme.secondaryText),
+                    style: TextStyle(color: dialogTheme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7)),
                   ),
                   actions: [
                     TextButton(
@@ -111,7 +113,7 @@ class ExpenseDetailScreen extends StatelessWidget {
             },
           ),
           IconButton(
-            icon: const Icon(Icons.edit, color: Colors.white),
+            icon: Icon(Icons.edit, color: theme.textTheme.bodyLarge?.color),
             onPressed: () {
               Navigator.push(
                 context,
@@ -134,10 +136,10 @@ class ExpenseDetailScreen extends StatelessWidget {
           }
 
           if (!snapshot.hasData || !snapshot.data!.exists) {
-            return const Center(
+            return Center(
               child: Text(
                 'Expense not found',
-                style: TextStyle(color: Colors.white),
+                style: TextStyle(color: theme.textTheme.bodyLarge?.color),
               ),
             );
           }
@@ -166,7 +168,7 @@ class ExpenseDetailScreen extends StatelessWidget {
                         width: 80,
                         height: 80,
                         decoration: BoxDecoration(
-                          color: _getCategoryColor(category).withOpacity(0.2),
+                          color: _getCategoryColor(category).withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Icon(
@@ -179,8 +181,8 @@ class ExpenseDetailScreen extends StatelessWidget {
                       // Title
                       Text(
                         title,
-                        style: const TextStyle(
-                          color: Colors.white,
+                        style: TextStyle(
+                          color: theme.textTheme.bodyLarge?.color,
                           fontSize: 24,
                           fontWeight: FontWeight.bold,
                         ),
@@ -189,8 +191,8 @@ class ExpenseDetailScreen extends StatelessWidget {
                       // Amount
                       Text(
                         '₹${amount.toStringAsFixed(2)}',
-                        style: const TextStyle(
-                          color: Colors.white,
+                        style: TextStyle(
+                          color: theme.textTheme.bodyLarge?.color,
                           fontSize: 32,
                           fontWeight: FontWeight.bold,
                         ),
@@ -217,7 +219,7 @@ class ExpenseDetailScreen extends StatelessWidget {
                                 ? 'Added by $addedBy on ${DateFormat('dd MMM yyyy').format(date)}'
                                 : 'Added by $addedBy',
                             style: TextStyle(
-                              color: Colors.grey[400],
+                              color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
                               fontSize: 14,
                             ),
                           );
@@ -232,7 +234,7 @@ class ExpenseDetailScreen extends StatelessWidget {
                   margin: const EdgeInsets.symmetric(horizontal: 16),
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.grey[900],
+                    color: theme.cardTheme.color,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Column(
@@ -260,12 +262,12 @@ class ExpenseDetailScreen extends StatelessWidget {
                                 width: 40,
                                 height: 40,
                                 decoration: BoxDecoration(
-                                  color: Colors.teal.withOpacity(0.2),
+                                  color: AppTheme.tealAccent.withValues(alpha: 0.2),
                                   shape: BoxShape.circle,
                                 ),
                                 child: const Icon(
                                   Icons.person,
-                                  color: Colors.teal,
+                                  color: AppTheme.tealAccent,
                                   size: 24,
                                 ),
                               ),
@@ -276,8 +278,8 @@ class ExpenseDetailScreen extends StatelessWidget {
                                   children: [
                                     Text(
                                       '$displayName paid ₹${amount.toStringAsFixed(2)}',
-                                      style: const TextStyle(
-                                        color: Colors.white,
+                                      style: TextStyle(
+                                        color: theme.textTheme.bodyLarge?.color,
                                         fontSize: 16,
                                         fontWeight: FontWeight.w500,
                                       ),
@@ -290,7 +292,7 @@ class ExpenseDetailScreen extends StatelessWidget {
                         },
                       ),
                       const SizedBox(height: 16),
-                      const Divider(color: Colors.grey),
+                      Divider(color: theme.dividerTheme.color),
                       const SizedBox(height: 16),
                       // Split details
                       ...splitDetails.entries.map((entry) {
@@ -336,8 +338,8 @@ class ExpenseDetailScreen extends StatelessWidget {
                                   Expanded(
                                     child: Text(
                                       isCurrentUser ? 'You' : userName,
-                                      style: const TextStyle(
-                                        color: Colors.white,
+                                      style: TextStyle(
+                                        color: theme.textTheme.bodyLarge?.color,
                                         fontSize: 14,
                                       ),
                                     ),
@@ -383,7 +385,7 @@ class ExpenseDetailScreen extends StatelessWidget {
                         Text(
                           'Notes',
                           style: TextStyle(
-                            color: Colors.grey[400],
+                            color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
                             fontSize: 14,
                             fontWeight: FontWeight.bold,
                           ),
@@ -391,8 +393,8 @@ class ExpenseDetailScreen extends StatelessWidget {
                         const SizedBox(height: 8),
                         Text(
                           notes,
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style: TextStyle(
+                            color: theme.textTheme.bodyLarge?.color,
                             fontSize: 14,
                           ),
                         ),
@@ -408,16 +410,16 @@ class ExpenseDetailScreen extends StatelessWidget {
                   margin: const EdgeInsets.symmetric(horizontal: 16),
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.grey[900],
+                    color: theme.cardTheme.color,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
+                      Text(
                         'Spending trends',
                         style: TextStyle(
-                          color: Colors.white,
+                          color: theme.textTheme.bodyLarge?.color,
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
                         ),
@@ -425,10 +427,10 @@ class ExpenseDetailScreen extends StatelessWidget {
                       const SizedBox(height: 16),
                       Center(
                         child: TextButton.icon(
-                          icon: const Icon(Icons.bar_chart, color: Colors.purple),
-                          label: const Text(
+                          icon: Icon(Icons.bar_chart, color: theme.colorScheme.primary),
+                          label: Text(
                             'View more charts',
-                            style: TextStyle(color: Colors.purple),
+                            style: TextStyle(color: theme.colorScheme.primary),
                           ),
                           onPressed: () {
                             ScaffoldMessenger.of(context).showSnackBar(
@@ -448,7 +450,15 @@ class ExpenseDetailScreen extends StatelessWidget {
         },
       ),
       bottomSheet: Container(
-        color: Colors.grey[900],
+        decoration: BoxDecoration(
+          color: theme.cardTheme.color,
+          border: Border(
+            top: BorderSide(
+              color: theme.dividerTheme.color ?? Colors.grey.withValues(alpha: 0.2),
+              width: 1,
+            ),
+          ),
+        ),
         padding: EdgeInsets.only(
           left: 16,
           right: 16,
@@ -459,11 +469,30 @@ class ExpenseDetailScreen extends StatelessWidget {
           children: [
             Expanded(
               child: TextField(
-                style: const TextStyle(color: Colors.white),
+                style: TextStyle(color: theme.textTheme.bodyLarge?.color),
                 decoration: InputDecoration(
                   hintText: 'Add a comment',
-                  hintStyle: TextStyle(color: Colors.grey[600]),
-                  border: InputBorder.none,
+                  hintStyle: TextStyle(color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7)),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(24),
+                    borderSide: BorderSide(
+                      color: theme.dividerTheme.color ?? Colors.grey.withValues(alpha: 0.3),
+                    ),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(24),
+                    borderSide: BorderSide(
+                      color: theme.dividerTheme.color ?? Colors.grey.withValues(alpha: 0.3),
+                    ),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(24),
+                    borderSide: BorderSide(
+                      color: AppTheme.tealAccent,
+                      width: 2,
+                    ),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 ),
                 onSubmitted: (value) {
                   if (value.trim().isNotEmpty) {
@@ -475,7 +504,10 @@ class ExpenseDetailScreen extends StatelessWidget {
               ),
             ),
             IconButton(
-              icon: const Icon(Icons.send, color: Colors.grey),
+              icon: Icon(
+                Icons.send,
+                color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
+              ),
               onPressed: () {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Comments feature coming soon')),

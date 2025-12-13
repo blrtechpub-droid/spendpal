@@ -1,4 +1,4 @@
-package com.example.spendpal
+package com.blrtechpub.spendpal
 
 import io.flutter.embedding.android.FlutterActivity
 

@@ -7,6 +7,7 @@ class UserModel {
   final String? phone;
   final String? photoURL;
   final Map<String, String> friends; // UID → Nickname
+  final String? upiId; // UPI ID for payments (e.g., user@paytm)
 
   UserModel({
     required this.uid,
@@ -15,6 +16,7 @@ class UserModel {
     this.phone,
     this.photoURL,
     required this.friends,
+    this.upiId,
   });
 
   factory UserModel.fromFirestore(DocumentSnapshot doc) {
@@ -26,6 +28,7 @@ class UserModel {
       phone: data['phone'],
       photoURL: data['photoURL'],
       friends: Map<String, String>.from(data['friends'] ?? {}),
+      upiId: data['upiId'],
     );
   }
 
@@ -37,6 +40,7 @@ class UserModel {
       'phone': phone,
       'photoURL': photoURL,
       'friends': friends,
+      'upiId': upiId,
     };
   }
 }

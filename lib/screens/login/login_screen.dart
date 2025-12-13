@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -25,36 +26,119 @@ class _LoginScreenState extends State<LoginScreen> {
 
 Future<void> _signInWithGoogle() async {
   try {
-    // New API uses .authenticate() for explicit auth
-    final GoogleSignInAccount googleUser = await GoogleSignIn.instance.authenticate();
+    print('🔵 Step 1: Starting Google Sign-In...');
 
-    // Get ID token
-    final idToken = googleUser.authentication.idToken;
+    // Get GoogleSignIn instance
+    final googleSignIn = GoogleSignIn.instance;
 
-    // Get access token via authorization client
-    final authClient = googleUser.authorizationClient;
-    final authorization = await authClient.authorizationForScopes(['email', 'profile']);
-    final accessToken = authorization?.accessToken;
+    // Initialize GoogleSignIn (required for v7.x)
+    print('🔵 Step 2: Initializing GoogleSignIn...');
+    await googleSignIn.initialize();
+    print('✅ Step 2: Initialized successfully');
 
-    if (idToken == null || accessToken == null) {
-      throw FirebaseAuthException(code: 'missing-token', message: 'Missing Google auth token');
+    // Authenticate the user
+    print('🔵 Step 3: Calling authenticate()...');
+    final GoogleSignInAccount? googleUser = await googleSignIn.authenticate();
+    print('✅ Step 3: authenticate() returned');
+
+    // If user cancels the sign-in
+    if (googleUser == null) {
+      final errorMsg = '⚠️ Step 3: User cancelled sign-in or authenticate() returned null';
+      print(errorMsg);
+
+      // Log to Crashlytics as non-fatal
+      FirebaseCrashlytics.instance.log(errorMsg);
+      FirebaseCrashlytics.instance.recordError(
+        Exception('Google Sign-In returned null account'),
+        StackTrace.current,
+        reason: 'User cancelled or authentication failed',
+        fatal: false,
+      );
+
+      Fluttertoast.showToast(msg: "Sign-in cancelled or failed");
+      return;
     }
 
-    // Create credential
+    print('✅ Step 4: Got GoogleSignInAccount: ${googleUser.email}');
+    FirebaseCrashlytics.instance.log('Step 4: Got account ${googleUser.email}');
+
+    // Get authentication details
+    print('🔵 Step 5: Getting authentication details...');
+    final GoogleSignInAuthentication googleAuth = googleUser.authentication;
+    print('✅ Step 5: Got authentication object');
+
+    // Get the ID token
+    final String? idToken = googleAuth.idToken;
+    print('🔵 Step 6: ID Token: ${idToken != null ? "exists (${idToken.substring(0, 20)}...)" : "NULL!!!"}');
+
+    if (idToken == null) {
+      final errorMsg = '❌ Step 6: ID Token is NULL! This is the problem!';
+      print(errorMsg);
+
+      // This is critical - log it
+      FirebaseCrashlytics.instance.log(errorMsg);
+      FirebaseCrashlytics.instance.recordError(
+        Exception('ID Token is null from Google Sign-In'),
+        StackTrace.current,
+        reason: 'Missing ID token - OAuth configuration issue',
+        fatal: false,
+      );
+
+      throw Exception('Failed to get ID token from Google Sign-In - OAuth may not be configured correctly');
+    }
+
+    // Create Firebase credential (only idToken needed for Firebase)
+    print('🔵 Step 7: Creating Firebase credential...');
     final credential = GoogleAuthProvider.credential(
       idToken: idToken,
-      accessToken: accessToken,
+    );
+    print('✅ Step 7: Created credential');
+
+    // Sign in to Firebase
+    print('🔵 Step 8: Signing in to Firebase...');
+    UserCredential userCredential = await FirebaseAuth.instance.signInWithCredential(credential);
+    print('✅ Step 8: Firebase sign-in successful: ${userCredential.user?.email}');
+
+    FirebaseCrashlytics.instance.log('SUCCESS: User ${userCredential.user?.email} signed in');
+
+    print('🔵 Step 9: Saving to Firestore...');
+    await saveUserToFirestore(userCredential.user!);
+    print('✅ Step 9: Saved to Firestore');
+
+    // Navigate to Home Screen
+    print('🔵 Step 10: Navigating to home...');
+    if (!mounted) return;
+    _navigateToHome();
+    print('✅ Step 10: Navigation complete');
+
+  } catch (e, stackTrace) {
+    // Check if user cancelled the sign-in
+    if (e.toString().contains('canceled') ||
+        e.toString().contains('cancelled') ||
+        e.toString().contains('Cancelled by user')) {
+      print('ℹ️ User cancelled Google Sign-In');
+      Fluttertoast.showToast(msg: "Sign-in cancelled");
+      return; // Exit gracefully, don't log as error
+    }
+
+    // This is an actual error, log it
+    final errorMsg = '❌ FATAL ERROR in Google Sign-In: $e';
+    print(errorMsg);
+    print('❌ Stack trace: $stackTrace');
+
+    // Log error to Crashlytics for remote debugging
+    FirebaseCrashlytics.instance.log(errorMsg);
+    FirebaseCrashlytics.instance.recordError(
+      e,
+      stackTrace,
+      reason: 'Google Sign-In failed at some step',
+      fatal: false,
     );
 
-    UserCredential userCredential = await FirebaseAuth.instance.signInWithCredential(credential);
-    print('✅ Google Sign-In successful');
-    await saveUserToFirestore(userCredential.user!);
-    // ✅ Navigate to Home Screen after success
-    if (!mounted) return;
-    //Navigator.pushReplacementNamed(context, '/groups');
-    _navigateToHome();
-  } catch (e) {
-    print('❌ Google Sign-In error: $e');
+    Fluttertoast.showToast(
+      msg: "Sign-in failed: ${e.toString()}",
+      toastLength: Toast.LENGTH_LONG,
+    );
   }
 }
   Future<void> _sendOtp() async {
@@ -155,28 +239,28 @@ Future<void> saveUserToFirestore(User firebaseUser) async {
                         color: Colors.white,
                       ),
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: AppTheme.spacingL),  // 16
                     const Text(
                       'SpendPal',
                       style: TextStyle(
                         color: AppTheme.primaryText,
-                        fontSize: 36,
+                        fontSize: 32,  // Reduced from 36
                         fontWeight: FontWeight.bold,
                         letterSpacing: 1.2,
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: AppTheme.spacingS),  // 8
                     Text(
                       'Split expenses with friends',
                       style: TextStyle(
                         color: AppTheme.secondaryText,
-                        fontSize: 16,
+                        fontSize: 14,  // Reduced from 16
                       ),
                     ),
                   ],
                 ),
 
-                const SizedBox(height: 60),
+                const SizedBox(height: AppTheme.spacingXXL),  // 32 (was 60)
 
                 // Google Sign In Button
                 Container(
@@ -231,7 +315,7 @@ Future<void> saveUserToFirestore(User firebaseUser) async {
                   ),
                 ),
 
-                const SizedBox(height: 32),
+                const SizedBox(height: AppTheme.spacingXL),  // 24 (was 32)
 
                 // Divider with "OR"
                 Row(
@@ -261,7 +345,7 @@ Future<void> saveUserToFirestore(User firebaseUser) async {
                   ],
                 ),
 
-                const SizedBox(height: 32),
+                const SizedBox(height: AppTheme.spacingXL),  // 24 (was 32)
 
                 // Phone Number Input
                 TextField(

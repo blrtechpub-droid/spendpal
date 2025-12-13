@@ -212,10 +212,7 @@ class _PendingRequestsScreenState extends State<PendingRequestsScreen>
                   Expanded(
                     child: OutlinedButton(
                       onPressed: () => _rejectFriendRequest(request.requestId),
-                      style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: Colors.red),
-                        foregroundColor: Colors.red,
-                      ),
+                      style: AppTheme.dangerOutlinedButtonStyle,
                       child: const Text('Decline'),
                     ),
                   ),
@@ -439,10 +436,7 @@ class _PendingRequestsScreenState extends State<PendingRequestsScreen>
                   Expanded(
                     child: OutlinedButton(
                       onPressed: () => _rejectGroupInvitation(invitation.invitationId),
-                      style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: Colors.red),
-                        foregroundColor: Colors.red,
-                      ),
+                      style: AppTheme.dangerOutlinedButtonStyle,
                       child: const Text('Decline'),
                     ),
                   ),

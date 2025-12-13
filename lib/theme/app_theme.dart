@@ -25,6 +25,13 @@ class AppTheme {
   static const Color warningColor = Color(0xFFFFA726);
   static const Color successColor = Color(0xFF69F0AE);
 
+  // Helper method for soft white color (reduces glare in light mode)
+  static Color softWhite(BuildContext context) {
+    return Theme.of(context).brightness == Brightness.light
+        ? const Color(0xFFF8F8F8)  // Soft white for light mode
+        : Colors.white.withValues(alpha: 0.95);  // Slightly transparent for dark mode
+  }
+
   // Category Colors (Darker for dark theme visibility)
   static const Color foodCategory = Color(0xFFFFA726);        // Amber
   static const Color travelCategory = Color(0xFF42A5F5);      // Blue
@@ -197,7 +204,112 @@ class AppTheme {
     ],
   );
 
-  // Theme Data
+  // Light Theme Colors (Splitwise-style)
+  static const Color lightBackground = Color(0xFFF5F5F5);
+  static const Color lightCardBackground = Colors.white;
+  static const Color lightPrimaryText = Color(0xFF212121);
+  static const Color lightSecondaryText = Color(0xFF757575);
+  static const Color lightDivider = Color(0xFFE0E0E0);
+  static const Color tealPrimary = Color(0xFF5CC5A7); // Splitwise teal
+  static const Color tealDark = Color(0xFF48A38A);
+
+  // Theme Data - Light Theme (Splitwise-style)
+  static ThemeData get lightTheme {
+    return ThemeData(
+      brightness: Brightness.light,
+      scaffoldBackgroundColor: lightBackground,
+      primaryColor: tealPrimary,
+      colorScheme: ColorScheme.light(
+        primary: tealPrimary,
+        secondary: orangeAccent,
+        surface: lightCardBackground,
+        error: redAccent,
+        onPrimary: Colors.white,
+        onSecondary: Colors.white,
+        onSurface: lightPrimaryText,
+        onError: Colors.white,
+      ),
+      appBarTheme: AppBarTheme(
+        backgroundColor: tealPrimary,
+        elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.white),
+        titleTextStyle: heading3.copyWith(color: Colors.white),
+      ),
+      cardTheme: CardThemeData(
+        color: lightCardBackground,
+        elevation: 2,
+        shadowColor: Colors.black.withValues(alpha: 0.1),
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(Radius.circular(12)),
+        ),
+      ),
+      dividerTheme: const DividerThemeData(
+        color: lightDivider,
+        thickness: 1,
+      ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: tealPrimary,
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+          elevation: 0,
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: tealPrimary,
+          side: BorderSide(color: tealPrimary, width: 2),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        labelStyle: TextStyle(color: lightSecondaryText),
+        hintStyle: TextStyle(color: lightSecondaryText),
+        filled: true,
+        fillColor: Colors.grey[50],
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: lightDivider),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: lightDivider),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: tealPrimary, width: 2),
+        ),
+      ),
+      bottomNavigationBarTheme: BottomNavigationBarThemeData(
+        backgroundColor: const Color(0xFFFAFAFA),
+        selectedItemColor: tealPrimary,
+        unselectedItemColor: lightSecondaryText,
+        type: BottomNavigationBarType.fixed,
+        elevation: 8,
+      ),
+      textTheme: TextTheme(
+        displayLarge: heading1.copyWith(color: lightPrimaryText),
+        displayMedium: heading2.copyWith(color: lightPrimaryText),
+        displaySmall: heading3.copyWith(color: lightPrimaryText),
+        bodyLarge: bodyLarge.copyWith(color: lightPrimaryText),
+        bodyMedium: bodyMedium.copyWith(color: lightPrimaryText),
+        bodySmall: bodySmall.copyWith(color: lightSecondaryText),
+        labelSmall: caption.copyWith(color: lightSecondaryText),
+      ),
+      floatingActionButtonTheme: FloatingActionButtonThemeData(
+        backgroundColor: tealPrimary,
+        foregroundColor: Colors.white,
+      ),
+    );
+  }
+
+  // Theme Data - Dark Theme
   static ThemeData get darkTheme {
     return ThemeData(
       brightness: Brightness.dark,

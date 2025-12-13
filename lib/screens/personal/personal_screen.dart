@@ -6,8 +6,8 @@ import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:spendpal/theme/app_theme.dart';
 import 'package:spendpal/screens/expense/expense_detail_screen.dart';
 import 'package:spendpal/screens/expense/expense_screen.dart';
-import 'package:spendpal/screens/sms_expenses/sms_expenses_screen.dart';
-import 'package:spendpal/services/sms_expense_service.dart';
+import 'package:spendpal/screens/money_tracker/money_tracker_screen.dart';
+import 'package:spendpal/screens/personal/auto_import_tab.dart';
 
 class PersonalExpensesScreen extends StatefulWidget {
   const PersonalExpensesScreen({super.key});
@@ -16,9 +16,22 @@ class PersonalExpensesScreen extends StatefulWidget {
   State<PersonalExpensesScreen> createState() => _PersonalExpensesScreenState();
 }
 
-class _PersonalExpensesScreenState extends State<PersonalExpensesScreen> {
+class _PersonalExpensesScreenState extends State<PersonalExpensesScreen> with SingleTickerProviderStateMixin {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  late TabController _tabController;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 3, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
 
   // Get category icon based on category name
   IconData _getCategoryIcon(String category) {
@@ -166,66 +179,28 @@ class _PersonalExpensesScreenState extends State<PersonalExpensesScreen> {
   @override
   Widget build(BuildContext context) {
     final currentUserId = _auth.currentUser?.uid ?? '';
+    final theme = Theme.of(context);
 
     return Scaffold(
-      backgroundColor: AppTheme.primaryBackground,
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: AppTheme.primaryBackground,
-        title: const Text(
-          'My Expenses',
-          style: TextStyle(color: AppTheme.primaryText),
+        title: const Text('My Expenses'),
+        automaticallyImplyLeading: false,
+        elevation: 0,
+        bottom: TabBar(
+          controller: _tabController,
+          indicatorColor: theme.colorScheme.primary,
+          labelColor: theme.textTheme.bodyLarge?.color,
+          unselectedLabelColor: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.6),
+          tabs: const [
+            Tab(text: 'All'),
+            Tab(text: 'Auto-Import'),
+            Tab(text: 'Tracker'),
+          ],
         ),
         actions: [
-          // SMS Expenses button with badge
-          FutureBuilder<int>(
-            future: SmsExpenseService.getPendingCount(),
-            builder: (context, snapshot) {
-              final pendingCount = snapshot.data ?? 0;
-              return Stack(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.message, color: AppTheme.primaryText),
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const SmsExpensesScreen(),
-                        ),
-                      );
-                    },
-                    tooltip: 'SMS Expenses',
-                  ),
-                  if (pendingCount > 0)
-                    Positioned(
-                      right: 8,
-                      top: 8,
-                      child: Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: const BoxDecoration(
-                          color: AppTheme.errorColor,
-                          shape: BoxShape.circle,
-                        ),
-                        constraints: const BoxConstraints(
-                          minWidth: 16,
-                          minHeight: 16,
-                        ),
-                        child: Text(
-                          pendingCount > 99 ? '99+' : pendingCount.toString(),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                    ),
-                ],
-              );
-            },
-          ),
           IconButton(
-            icon: const Icon(Icons.filter_list, color: AppTheme.primaryText),
+            icon: const Icon(Icons.filter_list),
             onPressed: () {
               // TODO: Implement filter dialog
               ScaffoldMessenger.of(context).showSnackBar(
@@ -234,7 +209,7 @@ class _PersonalExpensesScreenState extends State<PersonalExpensesScreen> {
             },
           ),
           IconButton(
-            icon: const Icon(Icons.download, color: AppTheme.primaryText),
+            icon: const Icon(Icons.download),
             onPressed: () {
               // TODO: Implement export to PDF
               ScaffoldMessenger.of(context).showSnackBar(
@@ -244,15 +219,28 @@ class _PersonalExpensesScreenState extends State<PersonalExpensesScreen> {
           ),
         ],
       ),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: _firestore
-            .collection('expenses')
-            .where('paidBy', isEqualTo: currentUserId)
-            .snapshots(),
-        builder: (context, snapshot) {
+      body: TabBarView(
+        controller: _tabController,
+        children: [
+          _buildExpensesTab(currentUserId, theme, 'all'),
+          const AutoImportTab(), // Pending SMS + Investment SMS + Already imported expenses
+          const MoneyTrackerScreen(), // Financial tracker (salary, bank, credit card)
+        ],
+      ),
+    );
+  }
+
+  // Build expenses tab for different source types
+  Widget _buildExpensesTab(String currentUserId, ThemeData theme, String sourceType) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: _firestore
+          .collection('expenses')
+          .where('paidBy', isEqualTo: currentUserId)
+          .snapshots(),
+      builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(
-              child: CircularProgressIndicator(color: AppTheme.tealAccent),
+            return Center(
+              child: CircularProgressIndicator(color: theme.colorScheme.primary),
             );
           }
 
@@ -278,16 +266,42 @@ class _PersonalExpensesScreenState extends State<PersonalExpensesScreen> {
             );
           }
 
-          // Filter to show ONLY personal expenses (not group or friend expenses)
+          // Filter expenses based on source type and tab
           var allExpenses = snapshot.data!.docs;
-          var personalExpenses = allExpenses.where((expense) {
+          var filteredExpenses = allExpenses.where((expense) {
             final data = expense.data() as Map<String, dynamic>;
             final groupId = data['groupId'] ?? '';
             final splitWith = List<String>.from(data['splitWith'] ?? []);
+            final source = data['source'] ?? 'manual'; // Default to manual if no source field
+            final tags = List<String>.from(data['tags'] ?? []);
 
-            // Only include expenses that are NOT part of a group AND NOT split with friends
-            return groupId.isEmpty && splitWith.length <= 1;
+            // Filter out group and friend expenses for all tabs
+            if (groupId.isNotEmpty || splitWith.length > 1) {
+              return false;
+            }
+
+            // Filter by tab type
+            switch (sourceType) {
+              case 'all':
+                // All personal expenses regardless of source
+                return true;
+              case 'auto_import':
+                // Combine SMS and Statements (auto-imported expenses)
+                return source == 'sms' ||
+                       source == 'statement' ||
+                       source == 'receipt' ||
+                       tags.contains('sms') ||
+                       tags.contains('SMS') ||
+                       tags.contains('statement') ||
+                       tags.contains('bank') ||
+                       tags.contains('receipt');
+              default:
+                return false;
+            }
           }).toList();
+
+          // Use filteredExpenses instead of personalExpenses
+          var personalExpenses = filteredExpenses;
 
           // Sort by date (most recent first)
           personalExpenses.sort((a, b) {
@@ -301,46 +315,103 @@ class _PersonalExpensesScreenState extends State<PersonalExpensesScreen> {
 
           if (personalExpenses.isEmpty) {
             return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      color: AppTheme.tealAccent.withValues(alpha: 0.1),
-                      shape: BoxShape.circle,
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(32),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            AppTheme.tealAccent.withValues(alpha: 0.2),
+                            AppTheme.tealAccent.withValues(alpha: 0.05),
+                          ],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppTheme.tealAccent.withValues(alpha: 0.2),
+                            blurRadius: 20,
+                            offset: const Offset(0, 8),
+                          ),
+                        ],
+                      ),
+                      child: const Icon(
+                        Icons.receipt_long,
+                        size: 80,
+                        color: AppTheme.tealAccent,
+                      ),
                     ),
-                    child: const Icon(
-                      Icons.receipt_long,
-                      size: 64,
-                      color: AppTheme.tealAccent,
+                    const SizedBox(height: 32),
+                    Text(
+                      'No expenses yet',
+                      style: TextStyle(
+                        fontSize: 26,
+                        fontWeight: FontWeight.bold,
+                        color: theme.textTheme.bodyLarge?.color,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 24),
-                  const Text(
-                    'No expenses yet',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: AppTheme.primaryText,
+                    const SizedBox(height: 12),
+                    Text(
+                      'Track your personal expenses here',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Track your personal expenses here',
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: AppTheme.secondaryText,
+                    const SizedBox(height: 40),
+                    Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(16),
+                        gradient: LinearGradient(
+                          colors: [
+                            AppTheme.tealAccent,
+                            AppTheme.tealAccent.withValues(
+                              red: (AppTheme.tealAccent.r * 0.8).clamp(0, 1),
+                              green: (AppTheme.tealAccent.g * 0.8).clamp(0, 1),
+                              blue: (AppTheme.tealAccent.b * 0.8).clamp(0, 1),
+                            ),
+                          ],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppTheme.tealAccent.withValues(alpha: 0.4),
+                            blurRadius: 16,
+                            offset: const Offset(0, 8),
+                          ),
+                        ],
+                      ),
+                      child: ElevatedButton.icon(
+                        icon: const Icon(Icons.add_circle_outline, size: 24),
+                        label: const Text(
+                          'Add First Expense',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.transparent,
+                          foregroundColor: Colors.white,
+                          shadowColor: Colors.transparent,
+                          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 18),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                        ),
+                        onPressed: () => Navigator.pushNamed(context, '/add_expense'),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 24),
-                  ElevatedButton.icon(
-                    icon: const Icon(Icons.add),
-                    label: const Text('Add First Expense'),
-                    style: AppTheme.primaryButtonStyle,
-                    onPressed: () => Navigator.pushNamed(context, '/add_expense'),
-                  ),
-                ],
+                  ],
+                ),
               ),
             );
           }
@@ -369,7 +440,7 @@ class _PersonalExpensesScreenState extends State<PersonalExpensesScreen> {
                       ),
                       border: Border(
                         bottom: BorderSide(
-                          color: AppTheme.dividerColor,
+                          color: theme.dividerTheme.color ?? Colors.grey.withValues(alpha: 0.2),
                           width: 1,
                         ),
                       ),
@@ -395,14 +466,14 @@ class _PersonalExpensesScreenState extends State<PersonalExpensesScreen> {
                         ),
                         if (categoryBreakdown.isNotEmpty) ...[
                           const SizedBox(height: 16),
-                          const Divider(color: AppTheme.dividerColor),
+                          Divider(color: theme.dividerTheme.color),
                           const SizedBox(height: 8),
-                          const Text(
+                          Text(
                             'Top Categories',
                             style: TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.w600,
-                              color: AppTheme.secondaryText,
+                              color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
                             ),
                           ),
                           const SizedBox(height: 12),
@@ -421,30 +492,41 @@ class _PersonalExpensesScreenState extends State<PersonalExpensesScreen> {
             },
           );
         },
-      ),
-    );
+      );
   }
 
   Widget _buildStatCard(String label, String value, IconData icon, Color color) {
+    final theme = Theme.of(context);
+
     return Expanded(
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: color.withValues(alpha: 0.3),
-            width: 1,
+          gradient: LinearGradient(
+            colors: [
+              color.withValues(alpha: 0.15),
+              color.withValues(alpha: 0.05),
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
           ),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: color.withValues(alpha: 0.2),
+              blurRadius: 8,
+              offset: const Offset(0, 3),
+            ),
+          ],
         ),
         child: Column(
           children: [
-            Icon(icon, color: color, size: 28),
+            Icon(icon, color: color, size: 32),
             const SizedBox(height: 8),
             Text(
               value,
               style: TextStyle(
-                fontSize: 20,
+                fontSize: 22,
                 fontWeight: FontWeight.bold,
                 color: color,
               ),
@@ -452,9 +534,10 @@ class _PersonalExpensesScreenState extends State<PersonalExpensesScreen> {
             const SizedBox(height: 4),
             Text(
               label,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
-                color: AppTheme.secondaryText,
+                fontWeight: FontWeight.w500,
+                color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
               ),
             ),
           ],
@@ -497,6 +580,8 @@ class _PersonalExpensesScreenState extends State<PersonalExpensesScreen> {
   }
 
   Widget _buildExpensesList(List<QueryDocumentSnapshot> expenses) {
+    final theme = Theme.of(context);
+
     // Group expenses by month
     Map<String, List<QueryDocumentSnapshot>> groupedExpenses = {};
     for (var expense in expenses) {
@@ -519,10 +604,10 @@ class _PersonalExpensesScreenState extends State<PersonalExpensesScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
-                color: AppTheme.secondaryBackground,
+                color: theme.cardTheme.color?.withValues(alpha: 0.5) ?? theme.scaffoldBackgroundColor,
                 border: Border(
                   bottom: BorderSide(
-                    color: AppTheme.dividerColor,
+                    color: theme.dividerTheme.color ?? Colors.grey.withValues(alpha: 0.2),
                     width: 1,
                   ),
                 ),
@@ -532,10 +617,10 @@ class _PersonalExpensesScreenState extends State<PersonalExpensesScreen> {
                 children: [
                   Text(
                     entry.key,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.bold,
-                      color: AppTheme.secondaryText,
+                      color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
                       letterSpacing: 0.5,
                     ),
                   ),
@@ -615,8 +700,26 @@ class _PersonalExpensesScreenState extends State<PersonalExpensesScreen> {
                   width: 54,
                   height: 54,
                   decoration: BoxDecoration(
-                    color: _getCategoryBackgroundColor(category),
+                    gradient: LinearGradient(
+                      colors: [
+                        _getCategoryBackgroundColor(category),
+                        _getCategoryBackgroundColor(category).withValues(
+                          red: (_getCategoryBackgroundColor(category).r * 0.7).clamp(0, 1),
+                          green: (_getCategoryBackgroundColor(category).g * 0.7).clamp(0, 1),
+                          blue: (_getCategoryBackgroundColor(category).b * 0.7).clamp(0, 1),
+                        ),
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
                     borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: _getCategoryBackgroundColor(category).withValues(alpha: 0.4),
+                        blurRadius: 6,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
                   ),
                   child: Icon(
                     _getCategoryIcon(category),
@@ -626,9 +729,9 @@ class _PersonalExpensesScreenState extends State<PersonalExpensesScreen> {
                 ),
                 title: Text(
                   title,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontWeight: FontWeight.w600,
-                    color: AppTheme.primaryText,
+                    color: theme.textTheme.bodyLarge?.color,
                     fontSize: 16,
                   ),
                 ),
@@ -676,9 +779,9 @@ class _PersonalExpensesScreenState extends State<PersonalExpensesScreen> {
                           Expanded(
                             child: Text(
                               DateFormat('MMM dd, yyyy • h:mm a').format(date),
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 12,
-                                color: AppTheme.secondaryText,
+                                color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
                               ),
                             ),
                           ),
@@ -692,9 +795,9 @@ class _PersonalExpensesScreenState extends State<PersonalExpensesScreen> {
                           notes,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12,
-                            color: AppTheme.tertiaryText,
+                            color: theme.textTheme.bodySmall?.color,
                             fontStyle: FontStyle.italic,
                           ),
                         ),
@@ -755,7 +858,7 @@ class _PersonalExpensesScreenState extends State<PersonalExpensesScreen> {
 
     List<Map<String, dynamic>> friends = [];
     if (friendsData is Map) {
-      for (var entry in (friendsData as Map).entries) {
+      for (var entry in friendsData.entries) {
         final friendId = entry.key as String;
         final nickname = entry.value as String?;
 
@@ -856,9 +959,10 @@ class _PersonalExpensesScreenState extends State<PersonalExpensesScreen> {
     Map<String, dynamic> expenseData,
     List<Map<String, dynamic>> groups,
   ) {
+    final theme = Theme.of(context);
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppTheme.secondaryBackground,
+      backgroundColor: theme.cardTheme.color,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -872,16 +976,16 @@ class _PersonalExpensesScreenState extends State<PersonalExpensesScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
+                  Text(
                     'Split with Group',
                     style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
-                      color: AppTheme.primaryText,
+                      color: theme.textTheme.bodyLarge?.color,
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.close, color: AppTheme.primaryText),
+                    icon: const Icon(Icons.close),
                     onPressed: () => Navigator.pop(context),
                   ),
                 ],
@@ -906,11 +1010,11 @@ class _PersonalExpensesScreenState extends State<PersonalExpensesScreen> {
                       ),
                       title: Text(
                         group['name'],
-                        style: const TextStyle(color: AppTheme.primaryText),
+                        style: TextStyle(color: theme.textTheme.bodyLarge?.color),
                       ),
                       subtitle: Text(
                         '${(group['members'] as List).length} members',
-                        style: const TextStyle(color: AppTheme.secondaryText),
+                        style: TextStyle(color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7)),
                       ),
                       onTap: () async {
                         Navigator.pop(context);

@@ -31,6 +31,60 @@ service cloud.firestore {
 
       // Prevent deletion for now
       allow delete: if false;
+
+      // Investment Assets subcollection
+      match /investmentAssets/{assetId} {
+        // Users can only access their own investment assets
+        allow read, write: if isOwner(userId);
+      }
+
+      // Investment Holdings subcollection
+      match /investmentHoldings/{holdingId} {
+        // Users can only access their own holdings
+        allow read, write: if isOwner(userId);
+      }
+
+      // Investment Transactions subcollection
+      match /investmentTransactions/{txnId} {
+        // Users can only access their own transactions
+        allow read, write: if isOwner(userId);
+      }
+
+      // Portfolio Valuations subcollection
+      match /portfolioValuations/{valuationId} {
+        // Users can only access their own portfolio valuations
+        allow read, write: if isOwner(userId);
+      }
+
+      // Investment SMS Queue subcollection
+      match /investmentSmsQueue/{queueId} {
+        // Users can only access their own investment SMS queue
+        allow read, write: if isOwner(userId);
+      }
+
+      // Email Transaction Queue subcollection
+      match /emailTransactionQueue/{queueId} {
+        // Users can only access their own email transactions
+        allow read, write: if isOwner(userId);
+      }
+
+      // Custom Email Patterns subcollection (Smart Email Parsing)
+      match /customEmailPatterns/{patternId} {
+        // Users can only read, create, update their own custom email patterns
+        allow read, write: if isOwner(userId);
+      }
+
+      // Email Learning Data subcollection (Manual corrections)
+      match /emailLearningData/{learningId} {
+        // Users can only access their own learning data
+        allow read, write: if isOwner(userId);
+      }
+
+      // Credit Card Statement Queue subcollection
+      match /creditCardStatementQueue/{queueId} {
+        // Users can only access their own credit card statements
+        allow read, write: if isOwner(userId);
+      }
     }
 
     // Expenses collection
@@ -164,6 +218,138 @@ service cloud.firestore {
 
       // Users cannot delete bug reports
       allow delete: if false;
+    }
+
+    // SMS Expenses collection
+    match /sms_expenses/{smsExpenseId} {
+      // Users can read their own SMS expenses
+      allow read: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid;
+
+      // Users can create SMS expenses for themselves
+      allow create: if isAuthenticated() &&
+        request.resource.data.userId == request.auth.uid &&
+        request.resource.data.status == 'pending';
+
+      // Users can update their own SMS expenses (categorize, ignore)
+      allow update: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid;
+
+      // Users can delete their own SMS expenses
+      allow delete: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid;
+    }
+
+    // Settlements/Payments collection
+    match /settlements/{settlementId} {
+      // Users can read settlements where they are sender or receiver
+      allow read: if isAuthenticated() && (
+        resource.data.fromUserId == request.auth.uid ||
+        resource.data.toUserId == request.auth.uid
+      );
+
+      // Users can create settlements where they are the sender
+      allow create: if isAuthenticated() &&
+        request.resource.data.fromUserId == request.auth.uid &&
+        request.resource.data.isVerified == false;
+
+      // Only receiver can verify the settlement
+      allow update: if isAuthenticated() &&
+        resource.data.toUserId == request.auth.uid &&
+        resource.data.isVerified == false &&
+        request.resource.data.isVerified == true &&
+        // Only verification fields can be updated
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isVerified', 'verifiedAt']);
+
+      // Users cannot delete settlements (permanent record)
+      allow delete: if false;
+    }
+
+    // Receipts collection
+    match /receipts/{receiptId} {
+      // Users can read their own receipts
+      allow read: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid;
+
+      // Users can create receipts for themselves
+      allow create: if isAuthenticated() &&
+        request.resource.data.userId == request.auth.uid;
+
+      // Users can update their own receipts
+      allow update: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid;
+
+      // Users can delete their own receipts
+      allow delete: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid;
+    }
+
+    // Receipt Items collection
+    match /receipt_items/{itemId} {
+      // Users can read their own receipt items
+      allow read: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid;
+
+      // Users can create receipt items for themselves
+      allow create: if isAuthenticated() &&
+        request.resource.data.userId == request.auth.uid;
+
+      // Users can update their own receipt items
+      allow update: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid;
+
+      // Users can delete their own receipt items
+      allow delete: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid;
+    }
+
+    // Bill Upload History collection
+    match /bill_upload_history/{historyId} {
+      // Users can read their own upload history
+      allow read: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid;
+
+      // Users can create upload history for themselves
+      allow create: if isAuthenticated() &&
+        request.resource.data.userId == request.auth.uid;
+
+      // No updates or deletes (append-only log)
+      allow update, delete: if false;
+    }
+
+    // Regex Patterns collections (for self-learning AI system)
+    match /regex_patterns/sms_patterns/{patternId} {
+      // All authenticated users can read patterns
+      allow read: if isAuthenticated();
+
+      // System creates patterns (users don't directly create)
+      allow write: if false;
+    }
+
+    match /regex_patterns/bill_patterns/{patternId} {
+      // All authenticated users can read patterns
+      allow read: if isAuthenticated();
+
+      // System creates patterns (users don't directly create)
+      allow write: if false;
+    }
+
+    match /regex_patterns/receipt_patterns/{patternId} {
+      // All authenticated users can read patterns
+      allow read: if isAuthenticated();
+
+      // System creates patterns (users don't directly create)
+      allow write: if false;
+    }
+
+    // Global Email Parsing Patterns (Smart Email Parsing)
+    match /emailParsingPatterns/{patternId} {
+      // All authenticated users can read global patterns
+      allow read: if isAuthenticated();
+
+      // Only Cloud Functions can create/update patterns (via admin SDK)
+      // Users cannot directly write to global patterns
+      allow write: if false;
     }
   }
 }

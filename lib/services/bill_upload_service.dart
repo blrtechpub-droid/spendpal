@@ -1,15 +1,22 @@
 import 'dart:io';
+import 'dart:convert';
+import 'package:crypto/crypto.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:path/path.dart' as path;
 import 'package:spendpal/models/bill_parsing_response.dart';
+import 'package:spendpal/models/bill_upload_history_model.dart';
+import 'package:spendpal/models/regex_pattern_model.dart';
+import 'package:spendpal/services/regex_pattern_service.dart';
 
 class BillUploadService {
   final FirebaseStorage _storage = FirebaseStorage.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final ImagePicker _imagePicker = ImagePicker();
 
   // Constants
@@ -18,6 +25,99 @@ class BillUploadService {
 
   // Set to true to use mock data for testing (without deploying Cloud Functions)
   static const bool _useMockData = false;
+
+  /// Compute SHA-256 hash of file to detect duplicates
+  Future<String> _computeFileHash(File file) async {
+    final bytes = await file.readAsBytes();
+    final digest = sha256.convert(bytes);
+    return digest.toString();
+  }
+
+  /// Check if bill with same hash was already uploaded
+  /// Returns the existing upload history if found
+  Future<BillUploadHistoryModel?> checkDuplicateBill(File file) async {
+    try {
+      final User? user = _auth.currentUser;
+      if (user == null) return null;
+
+      final fileHash = await _computeFileHash(file);
+
+      final query = await _firestore
+          .collection('bill_upload_history')
+          .where('userId', isEqualTo: user.uid)
+          .where('fileHash', isEqualTo: fileHash)
+          .limit(1)
+          .get();
+
+      if (query.docs.isNotEmpty) {
+        return BillUploadHistoryModel.fromDocument(query.docs.first);
+      }
+
+      return null;
+    } catch (e) {
+      print('Error checking duplicate bill: $e');
+      return null; // On error, proceed with upload (safer)
+    }
+  }
+
+  /// Save bill upload history to Firestore
+  Future<void> _saveUploadHistory({
+    required String fileHash,
+    required String fileName,
+    required int fileSizeBytes,
+    required String fileUrl,
+    String? bankName,
+    String? month,
+    String? year,
+    required int transactionCount,
+  }) async {
+    try {
+      final User? user = _auth.currentUser;
+      if (user == null) return;
+
+      final history = BillUploadHistoryModel(
+        id: '', // Will be set by Firestore
+        userId: user.uid,
+        fileHash: fileHash,
+        fileName: fileName,
+        fileSizeBytes: fileSizeBytes,
+        fileUrl: fileUrl,
+        uploadedAt: DateTime.now(),
+        bankName: bankName,
+        month: month,
+        year: year,
+        transactionCount: transactionCount,
+        status: 'processed',
+      );
+
+      await _firestore
+          .collection('bill_upload_history')
+          .add(history.toFirestore());
+
+      print('📝 Bill upload history saved: $fileName');
+    } catch (e) {
+      print('Error saving upload history: $e');
+      // Don't throw - history is optional
+    }
+  }
+
+  /// Get upload history for current user
+  Stream<List<BillUploadHistoryModel>> getUploadHistory() {
+    final User? user = _auth.currentUser;
+    if (user == null) {
+      return Stream.value([]);
+    }
+
+    return _firestore
+        .collection('bill_upload_history')
+        .where('userId', isEqualTo: user.uid)
+        .orderBy('uploadedAt', descending: true)
+        .limit(20) // Last 20 uploads
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => BillUploadHistoryModel.fromDocument(doc))
+            .toList());
+  }
 
   /// Pick a file from device storage (PDF or image)
   Future<File?> pickBillFile() async {
@@ -223,6 +323,7 @@ class BillUploadService {
   }
 
   /// Complete flow: Pick file, upload, and parse
+  /// Smart upload: Checks for duplicates before AI parsing to save costs
   Stream<BillUploadStatus> uploadAndParseBill({
     required File file,
     String? bankName,
@@ -230,6 +331,34 @@ class BillUploadService {
     String? year,
   }) async* {
     try {
+      // Step 0: Check for duplicate bill (saves AI costs!)
+      yield BillUploadStatus(
+        phase: 'checking',
+        progress: 0.0,
+        message: 'Checking for duplicate bills...',
+      );
+
+      final duplicate = await checkDuplicateBill(file);
+      if (duplicate != null) {
+        print('🔍 Duplicate bill detected! Previously uploaded: ${duplicate.uploadedAt}');
+        print('💰 Saved AI parsing cost by using cached result');
+
+        // Return cached result instead of re-parsing
+        // Note: We don't have the full BillParsingResponse stored,
+        // so we inform the user and skip AI call
+        yield BillUploadStatus.error(
+          'This bill was already uploaded on ${duplicate.uploadedAt.toString().split(' ')[0]}.\n'
+          '${duplicate.transactionCount} transactions were extracted.\n\n'
+          'Upload a different bill to avoid duplicate charges.',
+        );
+        return;
+      }
+
+      // Compute file hash for history tracking
+      final fileHash = await _computeFileHash(file);
+      final fileName = path.basename(file.path);
+      final fileSizeBytes = await file.length();
+
       // Phase 1: Uploading
       yield BillUploadStatus.uploading(0.0);
 
@@ -254,6 +383,49 @@ class BillUploadService {
         bankName: bankName,
         month: month,
         year: year,
+      );
+
+      // STEP 3: Save AI-generated regex pattern (if provided)
+      final regexPatternData = result.regexPattern;
+      if (regexPatternData != null && bankName != null) {
+        print('🎓 AI generated a bill regex pattern! Saving for future use...');
+        try {
+          final generatedPattern = GeneratedPattern(
+            pattern: regexPatternData['pattern'] as String,
+            description: regexPatternData['description'] as String,
+            extractionMap: Map<String, int>.from(
+              regexPatternData['extractionMap'] as Map,
+            ),
+            confidence: regexPatternData['confidence'] as int,
+            categoryHint: regexPatternData['categoryHint'] as String?,
+          );
+
+          final saved = await RegexPatternService.saveBillPattern(
+            generatedPattern: generatedPattern,
+            bank: bankName,
+            type: 'credit_card',
+          );
+
+          if (saved) {
+            print('✅ Bill regex pattern saved! Future bills from $bankName will be FREE');
+            print('   Confidence: ${generatedPattern.confidence}%');
+          }
+        } catch (e) {
+          print('⚠️ Failed to save bill regex pattern: $e');
+          // Continue anyway - parsing succeeded
+        }
+      }
+
+      // Save upload history for future duplicate detection
+      await _saveUploadHistory(
+        fileHash: fileHash,
+        fileName: fileName,
+        fileSizeBytes: fileSizeBytes,
+        fileUrl: fileUrl,
+        bankName: bankName,
+        month: month,
+        year: year,
+        transactionCount: result.transactions.length,
       );
 
       // Phase 4: Completed

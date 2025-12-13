@@ -82,18 +82,15 @@ class ActivityScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
+    final theme = Theme.of(context);
 
     return Scaffold(
-      backgroundColor: AppTheme.primaryBackground,
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: AppTheme.primaryBackground,
-        title: const Text(
-          'Recent activity',
-          style: TextStyle(color: AppTheme.primaryText, fontSize: 20),
-        ),
+        title: const Text('Recent Activity'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.search, color: AppTheme.primaryText),
+            icon: const Icon(Icons.search),
             onPressed: () {
               // TODO: Implement search
             },
@@ -107,8 +104,8 @@ class ActivityScreen extends StatelessWidget {
             .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(
-              child: CircularProgressIndicator(color: AppTheme.tealAccent),
+            return Center(
+              child: CircularProgressIndicator(color: theme.colorScheme.primary),
             );
           }
 
@@ -117,11 +114,11 @@ class ActivityScreen extends StatelessWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.error, color: AppTheme.errorColor, size: 48),
+                  Icon(Icons.error, color: theme.colorScheme.error, size: 48),
                   const SizedBox(height: 16),
-                  const Text(
+                  Text(
                     'Error loading activities',
-                    style: TextStyle(color: AppTheme.secondaryText),
+                    style: TextStyle(color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7)),
                   ),
                 ],
               ),
@@ -267,12 +264,26 @@ class ActivityScreen extends StatelessWidget {
                           width: 56,
                           height: 56,
                           decoration: BoxDecoration(
-                            color: _getCategoryBackgroundColor(category),
-                            borderRadius: BorderRadius.circular(8),
+                            gradient: LinearGradient(
+                              colors: [
+                                _getCategoryBackgroundColor(category).withValues(alpha: 0.8),
+                                _getCategoryBackgroundColor(category).withValues(alpha: 0.4),
+                              ],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            borderRadius: BorderRadius.circular(12),
+                            boxShadow: [
+                              BoxShadow(
+                                color: _getCategoryBackgroundColor(category).withValues(alpha: 0.4),
+                                blurRadius: 6,
+                                offset: const Offset(0, 3),
+                              ),
+                            ],
                           ),
                           child: Icon(
                             _getCategoryIcon(category),
-                            color: AppTheme.primaryText,
+                            color: theme.textTheme.bodyLarge?.color,
                             size: 28,
                           ),
                         ),
@@ -284,10 +295,10 @@ class ActivityScreen extends StatelessWidget {
                             width: 20,
                             height: 20,
                             decoration: BoxDecoration(
-                              color: isGetBack ? AppTheme.tealAccent : AppTheme.orangeAccent,
+                              color: isGetBack ? Colors.green : Colors.orange,
                               shape: BoxShape.circle,
                               border: Border.all(
-                                color: AppTheme.primaryBackground,
+                                color: theme.scaffoldBackgroundColor,
                                 width: 2,
                               ),
                             ),
@@ -297,20 +308,20 @@ class ActivityScreen extends StatelessWidget {
                     ),
                     title: RichText(
                       text: TextSpan(
-                        style: const TextStyle(
-                          color: AppTheme.primaryText,
+                        style: TextStyle(
+                          color: theme.textTheme.bodyLarge?.color,
                           fontSize: 15,
                         ),
                         children: [
                           TextSpan(text: activityText),
                           if (activitySubtext.isNotEmpty) ...[
-                            const TextSpan(
+                            TextSpan(
                               text: ' ',
-                              style: TextStyle(color: AppTheme.secondaryText),
+                              style: TextStyle(color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7)),
                             ),
                             TextSpan(
                               text: activitySubtext,
-                              style: const TextStyle(color: AppTheme.secondaryText),
+                              style: TextStyle(color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7)),
                             ),
                           ],
                           const TextSpan(text: '.'),
@@ -327,7 +338,7 @@ class ActivityScreen extends StatelessWidget {
                           Text(
                             'You get back ₹${getBackAmount.toStringAsFixed(2)}',
                             style: const TextStyle(
-                              color: AppTheme.tealAccent,
+                              color: Colors.green,
                               fontSize: 14,
                             ),
                           )
@@ -335,23 +346,23 @@ class ActivityScreen extends StatelessWidget {
                           Text(
                             'You owe ₹${currentUserShare.toStringAsFixed(2)}',
                             style: const TextStyle(
-                              color: AppTheme.orangeAccent,
+                              color: Colors.orange,
                               fontSize: 14,
                             ),
                           )
                         else
                           Text(
                             'You paid ₹${amount.toStringAsFixed(2)}',
-                            style: const TextStyle(
-                              color: AppTheme.secondaryText,
+                            style: TextStyle(
+                              color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
                               fontSize: 14,
                             ),
                           ),
                         const SizedBox(height: 2),
                         Text(
                           relativeTime,
-                          style: const TextStyle(
-                            color: AppTheme.tertiaryText,
+                          style: TextStyle(
+                            color: theme.textTheme.bodySmall?.color,
                             fontSize: 12,
                           ),
                         ),

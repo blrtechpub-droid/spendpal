@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:spendpal/models/group_model.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:spendpal/screens/groups/add_group_members_screen.dart';
+import 'package:spendpal/screens/groups/group_settings_screen.dart';
 import 'package:spendpal/screens/expense/expense_detail_screen.dart';
 import 'package:intl/intl.dart';
 import 'package:spendpal/theme/app_theme.dart';
@@ -81,27 +82,33 @@ class GroupHomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
 
     return Scaffold(
-      backgroundColor: AppTheme.primaryBackground,
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: AppTheme.primaryBackground,
+        backgroundColor: theme.scaffoldBackgroundColor,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: AppTheme.primaryText),
+          icon: Icon(Icons.arrow_back, color: theme.textTheme.bodyLarge?.color),
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
           group.name,
-          style: const TextStyle(color: AppTheme.primaryText),
+          style: TextStyle(color: theme.textTheme.bodyLarge?.color),
           overflow: TextOverflow.ellipsis,
           maxLines: 1,
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.settings, color: AppTheme.primaryText),
+            icon: Icon(Icons.settings, color: theme.textTheme.bodyLarge?.color),
             onPressed: () {
-              // TODO: Group settings
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => GroupSettingsScreen(group: group),
+                ),
+              );
             },
           )
         ],
@@ -138,12 +145,12 @@ class GroupHomeScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 24),
-                  const Text(
+                  Text(
                     "No members yet",
                     style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
-                      color: AppTheme.primaryText,
+                      color: theme.textTheme.bodyLarge?.color,
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -151,7 +158,7 @@ class GroupHomeScreen extends StatelessWidget {
                     "Add members to start splitting expenses",
                     style: TextStyle(
                       fontSize: 16,
-                      color: AppTheme.secondaryText,
+                      color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
                     ),
                   ),
                   const SizedBox(height: 24),
@@ -210,7 +217,7 @@ class GroupHomeScreen extends StatelessWidget {
                       ),
                       border: Border(
                         bottom: BorderSide(
-                          color: AppTheme.dividerColor,
+                          color: theme.dividerTheme.color ?? Colors.grey,
                           width: 1,
                         ),
                       ),
@@ -236,15 +243,15 @@ class GroupHomeScreen extends StatelessWidget {
                               ),
                             ],
                           ),
-                          child: const Icon(Icons.groups, color: Colors.white, size: 40),
+                          child: const Icon(Icons.groups, color: Color(0xFFF8F8F8), size: 40),
                         ),
                         const SizedBox(height: 16),
                         Text(
                           group.name,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 22,
                             fontWeight: FontWeight.bold,
-                            color: AppTheme.primaryText,
+                            color: theme.textTheme.bodyLarge?.color,
                           ),
                         ),
                         const SizedBox(height: 8),
@@ -404,20 +411,20 @@ class GroupHomeScreen extends StatelessWidget {
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                               decoration: BoxDecoration(
-                                color: AppTheme.secondaryBackground,
+                                color: theme.cardTheme.color?.withValues(alpha: 0.5) ?? theme.scaffoldBackgroundColor,
                                 border: Border(
                                   bottom: BorderSide(
-                                    color: AppTheme.dividerColor,
+                                    color: theme.dividerTheme.color ?? Colors.grey,
                                     width: 1,
                                   ),
                                 ),
                               ),
                               child: Text(
                                 entry.key,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 14,
                                   fontWeight: FontWeight.bold,
-                                  color: AppTheme.secondaryText,
+                                  color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
                                   letterSpacing: 0.5,
                                 ),
                               ),
@@ -480,9 +487,9 @@ class GroupHomeScreen extends StatelessWidget {
                                     ),
                                     title: Text(
                                       title,
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         fontWeight: FontWeight.w600,
-                                        color: AppTheme.primaryText,
+                                        color: theme.textTheme.bodyLarge?.color,
                                         fontSize: 16,
                                       ),
                                       overflow: TextOverflow.ellipsis,
@@ -494,9 +501,9 @@ class GroupHomeScreen extends StatelessWidget {
                                         if (date != null)
                                           Text(
                                             '${DateFormat('MMM dd').format(date)} • $paidByName paid ₹${amount.toStringAsFixed(2)}',
-                                            style: const TextStyle(
+                                            style: TextStyle(
                                               fontSize: 13,
-                                              color: AppTheme.secondaryText,
+                                              color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
                                             ),
                                             overflow: TextOverflow.ellipsis,
                                             maxLines: 1,
@@ -504,9 +511,9 @@ class GroupHomeScreen extends StatelessWidget {
                                         if (splitDetails.length > 1)
                                           Text(
                                             '${splitDetails.length} people paid ₹${amount.toStringAsFixed(2)}',
-                                            style: const TextStyle(
+                                            style: TextStyle(
                                               fontSize: 13,
-                                              color: AppTheme.secondaryText,
+                                              color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
                                             ),
                                           ),
                                       ],

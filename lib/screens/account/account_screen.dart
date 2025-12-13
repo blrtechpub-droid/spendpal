@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:provider/provider.dart';
 import 'package:spendpal/screens/account/report_bug_screen.dart';
 import 'package:spendpal/screens/account/currency_selection_screen.dart';
+import 'package:spendpal/screens/account/features_screen.dart';
+import 'package:spendpal/screens/analytics/analytics_screen.dart';
+import 'package:spendpal/screens/import/splitwise_import_screen.dart';
 import 'package:spendpal/services/currency_service.dart';
 import 'package:spendpal/theme/app_theme.dart';
+import 'package:spendpal/providers/theme_provider.dart';
 
 class AccountScreen extends StatefulWidget {
   const AccountScreen({super.key});
@@ -42,14 +47,15 @@ class _AccountScreenState extends State<AccountScreen> {
   }
 
   Future<void> _signOut(BuildContext context) async {
+    final dialogTheme = Theme.of(context);
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: AppTheme.cardBackground,
-        title: const Text('Sign Out', style: TextStyle(color: AppTheme.primaryText)),
-        content: const Text(
+        backgroundColor: dialogTheme.cardTheme.color,
+        title: Text('Sign Out', style: TextStyle(color: dialogTheme.textTheme.bodyLarge?.color)),
+        content: Text(
           'Are you sure you want to sign out?',
-          style: TextStyle(color: AppTheme.secondaryText),
+          style: TextStyle(color: dialogTheme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7)),
         ),
         actions: [
           TextButton(
@@ -58,7 +64,7 @@ class _AccountScreenState extends State<AccountScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Sign Out', style: TextStyle(color: AppTheme.errorColor)),
+            child: Text('Sign Out', style: TextStyle(color: dialogTheme.colorScheme.error)),
           ),
         ],
       ),
@@ -75,12 +81,12 @@ class _AccountScreenState extends State<AccountScreen> {
   @override
   Widget build(BuildContext context) {
     final currentUser = FirebaseAuth.instance.currentUser;
+    final theme = Theme.of(context);
 
     return Scaffold(
-      backgroundColor: AppTheme.primaryBackground,
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: AppTheme.primaryBackground,
-        title: const Text('Account', style: TextStyle(color: AppTheme.primaryText)),
+        title: const Text('Account'),
         automaticallyImplyLeading: false,
       ),
       body: FutureBuilder<Map<String, dynamic>?>(
@@ -99,65 +105,153 @@ class _AccountScreenState extends State<AccountScreen> {
             children: [
               // User Profile Section
               Container(
-                padding: const EdgeInsets.all(20),
+                margin: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      AppTheme.tealAccent.withValues(alpha: 0.2),
+                      AppTheme.tealAccent.withValues(alpha: 0.05),
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppTheme.tealAccent.withValues(alpha: 0.15),
+                      blurRadius: 12,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
+                ),
                 child: Column(
                   children: [
-                    CircleAvatar(
-                      radius: AppTheme.avatarRadiusLarge,
-                      backgroundColor: AppTheme.tealAccent,
-                      backgroundImage: photoURL.isNotEmpty
-                          ? NetworkImage(photoURL)
-                          : null,
-                      child: photoURL.isEmpty
-                          ? Text(
-                              name.substring(0, 1).toUpperCase(),
-                              style: const TextStyle(
-                                color: AppTheme.primaryText,
-                                fontSize: 36,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            )
-                          : null,
+                    Container(
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppTheme.tealAccent.withValues(alpha: 0.3),
+                            blurRadius: 20,
+                            offset: const Offset(0, 8),
+                          ),
+                        ],
+                      ),
+                      child: CircleAvatar(
+                        radius: AppTheme.avatarRadiusLarge,
+                        backgroundColor: AppTheme.tealAccent,
+                        backgroundImage: photoURL.isNotEmpty
+                            ? NetworkImage(photoURL)
+                            : null,
+                        child: photoURL.isEmpty
+                            ? Text(
+                                name.substring(0, 1).toUpperCase(),
+                                style: TextStyle(
+                                  color: AppTheme.softWhite(context),
+                                  fontSize: 36,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              )
+                            : null,
+                      ),
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 20),
                     Text(
                       name,
-                      style: const TextStyle(
-                        color: AppTheme.primaryText,
-                        fontSize: 24,
+                      style: TextStyle(
+                        color: theme.textTheme.bodyLarge?.color,
+                        fontSize: 26,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 6),
                     Text(
                       email,
-                      style: const TextStyle(
-                        color: AppTheme.secondaryText,
-                        fontSize: 14,
+                      style: TextStyle(
+                        color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
+                        fontSize: 15,
                       ),
                     ),
-                    const SizedBox(height: 16),
-                    OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: AppTheme.primaryText),
-                        foregroundColor: AppTheme.primaryText,
+                    const SizedBox(height: 20),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: theme.brightness == Brightness.light ? Colors.grey[50] : Colors.white.withValues(alpha: 0.85),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: AppTheme.tealAccent,
+                          width: 2,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.08),
+                            blurRadius: 6,
+                            offset: const Offset(0, 3),
+                          ),
+                        ],
                       ),
-                      onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Edit profile feature coming soon')),
-                        );
-                      },
-                      icon: const Icon(Icons.edit, size: 18),
-                      label: const Text('Edit Profile'),
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.transparent,
+                          foregroundColor: AppTheme.tealAccent,
+                          shadowColor: Colors.transparent,
+                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        onPressed: () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Edit profile feature coming soon')),
+                          );
+                        },
+                        icon: const Icon(Icons.edit, size: 18),
+                        label: const Text(
+                          'Edit Profile',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ),
                     ),
                   ],
                 ),
               ),
 
-              const Divider(color: AppTheme.dividerColor, height: 1),
+              Divider(color: theme.dividerTheme.color, height: 1),
 
               // Settings Section
               _buildSectionHeader('Settings'),
+              _buildListTile(
+                context,
+                icon: Icons.star,
+                title: 'Features',
+                subtitle: 'Explore all app features',
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const FeaturesScreen(),
+                    ),
+                  );
+                },
+              ),
+              _buildListTile(
+                context,
+                icon: Icons.bar_chart,
+                title: 'Analytics',
+                subtitle: 'View spending trends and insights',
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const AnalyticsScreen(),
+                    ),
+                  );
+                },
+              ),
               _buildListTile(
                 context,
                 icon: Icons.notifications,
@@ -202,19 +296,51 @@ class _AccountScreenState extends State<AccountScreen> {
                   );
                 },
               ),
-              _buildListTile(
-                context,
-                icon: Icons.dark_mode,
-                title: 'Theme',
-                subtitle: 'Dark',
-                onTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Theme settings coming soon')),
+              // Theme toggle with Switch
+              Consumer<ThemeProvider>(
+                builder: (context, themeProvider, _) {
+                  return ListTile(
+                    leading: Icon(
+                      themeProvider.isDarkMode ? Icons.dark_mode : Icons.light_mode,
+                      color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
+                    ),
+                    title: Text(
+                      'Theme',
+                      style: TextStyle(
+                        color: theme.textTheme.bodyLarge?.color,
+                        fontSize: 16,
+                      ),
+                    ),
+                    subtitle: Text(
+                      themeProvider.isDarkMode ? 'Dark' : 'Light',
+                      style: TextStyle(
+                        color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
+                        fontSize: 14,
+                      ),
+                    ),
+                    trailing: Switch(
+                      value: themeProvider.isDarkMode,
+                      onChanged: (value) {
+                        themeProvider.toggleTheme();
+                      },
+                      thumbColor: WidgetStateProperty.resolveWith<Color>((states) {
+                        if (states.contains(WidgetState.selected)) {
+                          return AppTheme.tealAccent;
+                        }
+                        return Colors.grey;
+                      }),
+                      trackColor: WidgetStateProperty.resolveWith<Color>((states) {
+                        if (states.contains(WidgetState.selected)) {
+                          return AppTheme.tealAccent.withValues(alpha: 0.5);
+                        }
+                        return Colors.grey.withValues(alpha: 0.3);
+                      }),
+                    ),
                   );
                 },
               ),
 
-              const Divider(color: AppTheme.dividerColor, height: 1),
+              Divider(color: theme.dividerTheme.color, height: 1),
 
               // Data & Privacy Section
               _buildSectionHeader('Data & Privacy'),
@@ -231,6 +357,20 @@ class _AccountScreenState extends State<AccountScreen> {
               ),
               _buildListTile(
                 context,
+                icon: Icons.upload,
+                title: 'Import from Splitwise',
+                subtitle: 'Import expenses from Splitwise CSV',
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const SplitwiseImportScreen(),
+                    ),
+                  );
+                },
+              ),
+              _buildListTile(
+                context,
                 icon: Icons.delete_forever,
                 title: 'Delete Account',
                 subtitle: 'Permanently delete your account',
@@ -242,7 +382,7 @@ class _AccountScreenState extends State<AccountScreen> {
                 textColor: AppTheme.errorColor,
               ),
 
-              const Divider(color: AppTheme.dividerColor, height: 1),
+              Divider(color: theme.dividerTheme.color, height: 1),
 
               // Help & Support Section
               _buildSectionHeader('Help & Support'),
@@ -280,7 +420,7 @@ class _AccountScreenState extends State<AccountScreen> {
                 },
               ),
 
-              const Divider(color: AppTheme.dividerColor, height: 1),
+              Divider(color: theme.dividerTheme.color, height: 1),
 
               // About Section
               _buildSectionHeader('About'),
@@ -312,15 +452,15 @@ class _AccountScreenState extends State<AccountScreen> {
                 },
               ),
 
-              const Divider(color: AppTheme.dividerColor, height: 1),
+              Divider(color: theme.dividerTheme.color, height: 1),
 
               // Sign Out Button
               Padding(
                 padding: const EdgeInsets.all(20),
                 child: ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.errorColor,
-                    foregroundColor: AppTheme.primaryText,
+                    backgroundColor: theme.colorScheme.error,
+                    foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 12),
                   ),
                   onPressed: () => _signOut(context),
@@ -335,8 +475,8 @@ class _AccountScreenState extends State<AccountScreen> {
                 child: Text(
                   'SpendPal - Split expenses with friends\nMade with ❤️',
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: AppTheme.tertiaryText,
+                  style: TextStyle(
+                    color: theme.textTheme.bodySmall?.color,
                     fontSize: 12,
                   ),
                 ),
@@ -349,12 +489,13 @@ class _AccountScreenState extends State<AccountScreen> {
   }
 
   Widget _buildSectionHeader(String title) {
+    final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Text(
         title,
-        style: const TextStyle(
-          color: AppTheme.secondaryText,
+        style: TextStyle(
+          color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
           fontSize: 14,
           fontWeight: FontWeight.bold,
         ),
@@ -370,23 +511,24 @@ class _AccountScreenState extends State<AccountScreen> {
     VoidCallback? onTap,
     Color? textColor,
   }) {
+    final theme = Theme.of(context);
     return ListTile(
-      leading: Icon(icon, color: textColor ?? AppTheme.secondaryText),
+      leading: Icon(icon, color: textColor ?? theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7)),
       title: Text(
         title,
         style: TextStyle(
-          color: textColor ?? AppTheme.primaryText,
+          color: textColor ?? theme.textTheme.bodyLarge?.color,
           fontSize: 16,
         ),
       ),
       subtitle: subtitle != null
           ? Text(
               subtitle,
-              style: const TextStyle(color: AppTheme.secondaryText, fontSize: 14),
+              style: TextStyle(color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7), fontSize: 14),
             )
           : null,
       trailing: onTap != null
-          ? const Icon(Icons.chevron_right, color: AppTheme.secondaryText)
+          ? Icon(Icons.chevron_right, color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7))
           : null,
       onTap: onTap,
     );

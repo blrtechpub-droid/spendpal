@@ -7,6 +7,7 @@ class BillParsingResponse {
   final List<TransactionModel> transactions;
   final String? errorMessage;
   final Map<String, dynamic>? metadata; // Additional info like bankName, month, year
+  final Map<String, dynamic>? regexPattern; // AI-generated pattern for future bills
 
   BillParsingResponse({
     required this.status,
@@ -14,6 +15,7 @@ class BillParsingResponse {
     required this.transactions,
     this.errorMessage,
     this.metadata,
+    this.regexPattern,
   });
 
   factory BillParsingResponse.fromJson(Map<String, dynamic> json) {
@@ -28,12 +30,19 @@ class BillParsingResponse {
       metadata = Map<String, dynamic>.from(json['metadata'] as Map);
     }
 
+    // Safely convert regexPattern
+    Map<String, dynamic>? regexPattern;
+    if (json['regexPattern'] != null) {
+      regexPattern = Map<String, dynamic>.from(json['regexPattern'] as Map);
+    }
+
     return BillParsingResponse(
       status: json['status'] ?? 'error',
       parsedBy: json['parsedBy'] ?? 'unknown',
       transactions: transactions,
       errorMessage: json['errorMessage'],
       metadata: metadata,
+      regexPattern: regexPattern,
     );
   }
 

@@ -22,6 +22,7 @@ class _SmsExpensesScreenState extends State<SmsExpensesScreen> {
   int _selectedDays = 30; // Default: 1 month
   String? _lastError;
   bool _permissionDenied = false;
+  DateTime? _lastScanTime;
 
   final List<int> _durationOptions = [7, 15, 30, 60, 90];
 
@@ -30,6 +31,16 @@ class _SmsExpensesScreenState extends State<SmsExpensesScreen> {
     super.initState();
     _loadCurrencySymbol();
     _checkPlatformSupport();
+    _loadLastScanTime();
+  }
+
+  Future<void> _loadLastScanTime() async {
+    final lastScan = await SmsListenerService.getLastScanTimestamp();
+    if (mounted) {
+      setState(() {
+        _lastScanTime = lastScan;
+      });
+    }
   }
 
   void _checkPlatformSupport() {
@@ -106,6 +117,9 @@ class _SmsExpensesScreenState extends State<SmsExpensesScreen> {
 
       final count = await SmsListenerService.processRecentMessages(days: _selectedDays);
 
+      // Reload last scan time
+      await _loadLastScanTime();
+
       setState(() {
         _lastError = null;
         _permissionDenied = false;
@@ -167,9 +181,10 @@ class _SmsExpensesScreenState extends State<SmsExpensesScreen> {
   }
 
   void _showDurationPicker() {
+    final theme = Theme.of(context);
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppTheme.cardBackground,
+      backgroundColor: theme.cardTheme.color,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -179,19 +194,19 @@ class _SmsExpensesScreenState extends State<SmsExpensesScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'Select Scan Duration',
               style: TextStyle(
-                color: AppTheme.primaryText,
+                color: theme.textTheme.bodyLarge?.color,
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
               ),
             ),
             const SizedBox(height: 8),
-            const Text(
+            Text(
               'Choose how far back to scan for transactions',
               style: TextStyle(
-                color: AppTheme.secondaryText,
+                color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
                 fontSize: 14,
               ),
             ),
@@ -208,12 +223,12 @@ class _SmsExpensesScreenState extends State<SmsExpensesScreen> {
                 contentPadding: const EdgeInsets.symmetric(horizontal: 8),
                 leading: Icon(
                   isSelected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
-                  color: isSelected ? AppTheme.tealAccent : AppTheme.secondaryText,
+                  color: isSelected ? AppTheme.tealAccent : theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
                 ),
                 title: Text(
                   label,
                   style: TextStyle(
-                    color: isSelected ? AppTheme.tealAccent : AppTheme.primaryText,
+                    color: isSelected ? AppTheme.tealAccent : theme.textTheme.bodyLarge?.color,
                     fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                   ),
                 ),
@@ -249,6 +264,40 @@ class _SmsExpensesScreenState extends State<SmsExpensesScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('Failed to add expense'),
+              backgroundColor: AppTheme.errorColor,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: AppTheme.errorColor,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _categorizeAsSalary(SmsExpenseModel smsExpense) async {
+    try {
+      final salaryId = await SmsExpenseService.categorizeAsSalary(smsExpense);
+
+      if (mounted) {
+        if (salaryId != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Added to salary records'),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Failed to add salary'),
               backgroundColor: AppTheme.errorColor,
             ),
           );
@@ -304,14 +353,15 @@ class _SmsExpensesScreenState extends State<SmsExpensesScreen> {
   }
 
   Future<void> _deleteSmsExpense(SmsExpenseModel smsExpense) async {
+    final theme = Theme.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: AppTheme.cardBackground,
-        title: const Text('Delete Expense?', style: TextStyle(color: AppTheme.primaryText)),
-        content: const Text(
+        backgroundColor: theme.cardTheme.color,
+        title: Text('Delete Expense?', style: TextStyle(color: theme.textTheme.bodyLarge?.color)),
+        content: Text(
           'This will permanently delete this SMS expense. This action cannot be undone.',
-          style: TextStyle(color: AppTheme.secondaryText),
+          style: TextStyle(color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7)),
         ),
         actions: [
           TextButton(
@@ -342,9 +392,10 @@ class _SmsExpensesScreenState extends State<SmsExpensesScreen> {
   }
 
   void _showExpenseDetails(SmsExpenseModel smsExpense) {
+    final theme = Theme.of(context);
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppTheme.cardBackground,
+      backgroundColor: theme.cardTheme.color,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -361,8 +412,8 @@ class _SmsExpensesScreenState extends State<SmsExpensesScreen> {
                 Expanded(
                   child: Text(
                     smsExpense.merchant,
-                    style: const TextStyle(
-                      color: AppTheme.primaryText,
+                    style: TextStyle(
+                      color: theme.textTheme.bodyLarge?.color,
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
                     ),
@@ -381,10 +432,10 @@ class _SmsExpensesScreenState extends State<SmsExpensesScreen> {
               _buildDetailRow('Transaction ID', smsExpense.transactionId!),
             _buildDetailRow('Sender', smsExpense.smsSender),
             const SizedBox(height: 16),
-            const Text(
+            Text(
               'Original SMS:',
               style: TextStyle(
-                color: AppTheme.secondaryText,
+                color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
                 fontSize: 14,
                 fontWeight: FontWeight.bold,
               ),
@@ -393,52 +444,108 @@ class _SmsExpensesScreenState extends State<SmsExpensesScreen> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: AppTheme.primaryBackground,
+                color: theme.scaffoldBackgroundColor,
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
                 smsExpense.rawSms,
-                style: const TextStyle(
-                  color: AppTheme.primaryText,
+                style: TextStyle(
+                  color: theme.textTheme.bodyLarge?.color,
                   fontSize: 12,
                 ),
               ),
             ),
             const SizedBox(height: 20),
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () {
-                      Navigator.pop(context);
-                      _categorizeAsPersonal(smsExpense);
-                    },
-                    icon: const Icon(Icons.person),
-                    label: const Text('Personal'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.tealAccent,
-                      foregroundColor: AppTheme.primaryText,
-                    ),
+            // Show Salary button in modal for credit transactions
+            smsExpense.isCredit
+                ? Column(
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: () {
+                                Navigator.pop(context);
+                                _categorizeAsPersonal(smsExpense);
+                              },
+                              icon: const Icon(Icons.person, size: 18),
+                              label: const Text('Personal'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppTheme.tealAccent,
+                                foregroundColor: theme.textTheme.bodyLarge?.color,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: () {
+                                Navigator.pop(context);
+                                _categorizeAsSalary(smsExpense);
+                              },
+                              icon: const Icon(Icons.account_balance_wallet, size: 18),
+                              label: const Text('Salary'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.green,
+                                foregroundColor: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            Navigator.pop(context);
+                            _shareWithFriendOrGroup(smsExpense);
+                          },
+                          icon: const Icon(Icons.group),
+                          label: const Text('Share with Friends/Group'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: theme.cardTheme.color,
+                            foregroundColor: AppTheme.tealAccent,
+                            side: const BorderSide(color: AppTheme.tealAccent),
+                          ),
+                        ),
+                      ),
+                    ],
+                  )
+                : Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            Navigator.pop(context);
+                            _categorizeAsPersonal(smsExpense);
+                          },
+                          icon: const Icon(Icons.person),
+                          label: const Text('Personal'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.tealAccent,
+                            foregroundColor: theme.textTheme.bodyLarge?.color,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            Navigator.pop(context);
+                            _shareWithFriendOrGroup(smsExpense);
+                          },
+                          icon: const Icon(Icons.group),
+                          label: const Text('Share'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: theme.cardTheme.color,
+                            foregroundColor: AppTheme.tealAccent,
+                            side: const BorderSide(color: AppTheme.tealAccent),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () {
-                      Navigator.pop(context);
-                      _shareWithFriendOrGroup(smsExpense);
-                    },
-                    icon: const Icon(Icons.group),
-                    label: const Text('Share'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.cardBackground,
-                      foregroundColor: AppTheme.tealAccent,
-                      side: const BorderSide(color: AppTheme.tealAccent),
-                    ),
-                  ),
-                ),
-              ],
-            ),
           ],
         ),
       ),
@@ -446,6 +553,7 @@ class _SmsExpensesScreenState extends State<SmsExpensesScreen> {
   }
 
   Widget _buildDetailRow(String label, String value) {
+    final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
@@ -455,8 +563,8 @@ class _SmsExpensesScreenState extends State<SmsExpensesScreen> {
             width: 120,
             child: Text(
               label,
-              style: const TextStyle(
-                color: AppTheme.secondaryText,
+              style: TextStyle(
+                color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
                 fontSize: 14,
               ),
             ),
@@ -464,8 +572,8 @@ class _SmsExpensesScreenState extends State<SmsExpensesScreen> {
           Expanded(
             child: Text(
               value,
-              style: const TextStyle(
-                color: AppTheme.primaryText,
+              style: TextStyle(
+                color: theme.textTheme.bodyLarge?.color,
                 fontSize: 14,
                 fontWeight: FontWeight.w500,
               ),
@@ -476,8 +584,32 @@ class _SmsExpensesScreenState extends State<SmsExpensesScreen> {
     );
   }
 
+  String _getLastScanText() {
+    if (_lastScanTime == null) {
+      return 'Never scanned';
+    }
+
+    final now = DateTime.now();
+    final difference = now.difference(_lastScanTime!);
+
+    if (difference.inMinutes < 1) {
+      return 'Last scan: Just now';
+    } else if (difference.inMinutes < 60) {
+      return 'Last scan: ${difference.inMinutes}m ago';
+    } else if (difference.inHours < 24) {
+      return 'Last scan: ${difference.inHours}h ago';
+    } else if (difference.inDays == 1) {
+      return 'Last scan: Yesterday';
+    } else if (difference.inDays < 7) {
+      return 'Last scan: ${difference.inDays}d ago';
+    } else {
+      return 'Last scan: ${DateFormat('MMM dd').format(_lastScanTime!)}';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final durationLabel = _selectedDays == 7 ? '1 week' :
                           _selectedDays == 15 ? '2 weeks' :
                           _selectedDays == 30 ? '1 month' :
@@ -485,12 +617,25 @@ class _SmsExpensesScreenState extends State<SmsExpensesScreen> {
                           _selectedDays == 90 ? '3 months' : '$_selectedDays days';
 
     return Scaffold(
-      backgroundColor: AppTheme.primaryBackground,
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: AppTheme.primaryBackground,
-        title: const Text(
-          'SMS Expenses',
-          style: TextStyle(color: AppTheme.primaryText),
+        backgroundColor: theme.scaffoldBackgroundColor,
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'SMS Expenses',
+              style: TextStyle(color: theme.textTheme.bodyLarge?.color, fontSize: 20),
+            ),
+            Text(
+              _getLastScanText(),
+              style: TextStyle(
+                color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
+                fontSize: 12,
+                fontWeight: FontWeight.normal,
+              ),
+            ),
+          ],
         ),
         actions: [
           // Duration selector button
@@ -585,8 +730,9 @@ class _SmsExpensesScreenState extends State<SmsExpensesScreen> {
   }
 
   Widget _buildSmsExpenseCard(SmsExpenseModel smsExpense) {
+    final theme = Theme.of(context);
     return Card(
-      color: AppTheme.cardBackground,
+      color: theme.cardTheme.color,
       margin: const EdgeInsets.only(bottom: 12),
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -619,8 +765,8 @@ class _SmsExpensesScreenState extends State<SmsExpensesScreen> {
                       children: [
                         Text(
                           smsExpense.merchant,
-                          style: const TextStyle(
-                            color: AppTheme.primaryText,
+                          style: TextStyle(
+                            color: theme.textTheme.bodyLarge?.color,
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
                           ),
@@ -629,8 +775,8 @@ class _SmsExpensesScreenState extends State<SmsExpensesScreen> {
                         const SizedBox(height: 4),
                         Text(
                           DateFormat('dd MMM yyyy, hh:mm a').format(smsExpense.date),
-                          style: const TextStyle(
-                            color: AppTheme.secondaryText,
+                          style: TextStyle(
+                            color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
                             fontSize: 12,
                           ),
                         ),
@@ -658,35 +804,79 @@ class _SmsExpensesScreenState extends State<SmsExpensesScreen> {
                 ],
               ),
               const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () => _categorizeAsPersonal(smsExpense),
-                      icon: const Icon(Icons.person, size: 16),
-                      label: const Text('Personal'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppTheme.tealAccent,
-                        side: const BorderSide(color: AppTheme.tealAccent),
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                      ),
+              // Show Salary button only for credit transactions
+              smsExpense.isCredit
+                  ? Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () => _categorizeAsPersonal(smsExpense),
+                            icon: const Icon(Icons.person, size: 14),
+                            label: const Text('Personal', style: TextStyle(fontSize: 12)),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppTheme.tealAccent,
+                              side: const BorderSide(color: AppTheme.tealAccent),
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () => _categorizeAsSalary(smsExpense),
+                            icon: const Icon(Icons.account_balance_wallet, size: 14),
+                            label: const Text('Salary', style: TextStyle(fontSize: 12)),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.green,
+                              side: const BorderSide(color: Colors.green),
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () => _shareWithFriendOrGroup(smsExpense),
+                            icon: const Icon(Icons.group, size: 14),
+                            label: const Text('Share', style: TextStyle(fontSize: 12)),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: theme.textTheme.bodyLarge?.color,
+                              side: const BorderSide(color: AppTheme.dividerColor),
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                            ),
+                          ),
+                        ),
+                      ],
+                    )
+                  : Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () => _categorizeAsPersonal(smsExpense),
+                            icon: const Icon(Icons.person, size: 16),
+                            label: const Text('Personal'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppTheme.tealAccent,
+                              side: const BorderSide(color: AppTheme.tealAccent),
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () => _shareWithFriendOrGroup(smsExpense),
+                            icon: const Icon(Icons.group, size: 16),
+                            label: const Text('Share'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: theme.textTheme.bodyLarge?.color,
+                              side: const BorderSide(color: AppTheme.dividerColor),
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () => _shareWithFriendOrGroup(smsExpense),
-                      icon: const Icon(Icons.group, size: 16),
-                      label: const Text('Share'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppTheme.primaryText,
-                        side: const BorderSide(color: AppTheme.dividerColor),
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
             ],
           ),
         ),
@@ -695,21 +885,22 @@ class _SmsExpensesScreenState extends State<SmsExpensesScreen> {
   }
 
   Widget _buildChip(String label, IconData icon) {
+    final theme = Theme.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: AppTheme.primaryBackground,
+        color: theme.scaffoldBackgroundColor,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 14, color: AppTheme.secondaryText),
+          Icon(icon, size: 14, color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7)),
           const SizedBox(width: 4),
           Text(
             label,
-            style: const TextStyle(
-              color: AppTheme.secondaryText,
+            style: TextStyle(
+              color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
               fontSize: 12,
             ),
           ),
@@ -719,6 +910,7 @@ class _SmsExpensesScreenState extends State<SmsExpensesScreen> {
   }
 
   Widget _buildErrorState(String errorMessage) {
+    final theme = Theme.of(context);
     final isPermissionError = _permissionDenied;
     final isIOSError = errorMessage.contains('iOS') || errorMessage.contains('platform restrictions');
 
@@ -740,8 +932,8 @@ class _SmsExpensesScreenState extends State<SmsExpensesScreen> {
               isIOSError ? 'Platform Not Supported' :
               isPermissionError ? 'Permission Required' :
               'Error',
-              style: const TextStyle(
-                color: AppTheme.primaryText,
+              style: TextStyle(
+                color: theme.textTheme.bodyLarge?.color,
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
               ),
@@ -750,8 +942,8 @@ class _SmsExpensesScreenState extends State<SmsExpensesScreen> {
             Text(
               errorMessage,
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: AppTheme.secondaryText,
+              style: TextStyle(
+                color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
                 fontSize: 16,
                 height: 1.5,
               ),
@@ -761,28 +953,28 @@ class _SmsExpensesScreenState extends State<SmsExpensesScreen> {
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: AppTheme.cardBackground,
+                  color: theme.cardTheme.color,
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Column(
+                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       'Why SMS scanning doesn\'t work on iOS:',
                       style: TextStyle(
-                        color: AppTheme.primaryText,
+                        color: theme.textTheme.bodyLarge?.color,
                         fontSize: 14,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    SizedBox(height: 8),
+                    const SizedBox(height: 8),
                     Text(
                       '• iOS restricts SMS access for privacy\n'
                       '• Only user-initiated actions allowed\n'
                       '• No background SMS scanning\n'
                       '• Manual expense entry only',
                       style: TextStyle(
-                        color: AppTheme.secondaryText,
+                        color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
                         fontSize: 14,
                         height: 1.6,
                       ),
@@ -803,7 +995,7 @@ class _SmsExpensesScreenState extends State<SmsExpensesScreen> {
                 label: const Text('Request Permission Again'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppTheme.tealAccent,
-                  foregroundColor: AppTheme.primaryText,
+                  foregroundColor: theme.textTheme.bodyLarge?.color,
                   padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                 ),
               )

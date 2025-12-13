@@ -475,7 +475,6 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                 keyboardType: TextInputType.number,
                 decoration: InputDecoration(
                   labelText: label,
-                  border: const OutlineInputBorder(),
                 ),
                 onChanged: (value) {
                   final numValue = double.tryParse(value) ?? 0;
@@ -591,6 +590,8 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.expenseId != null ? 'Edit Expense' : 'Add Expense'),
@@ -604,12 +605,14 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                 children: [
                   TextField(
                     controller: _titleController,
+                    style: TextStyle(color: theme.textTheme.bodyLarge?.color),
                     decoration: const InputDecoration(labelText: 'Expense Title'),
                   ),
                   const SizedBox(height: 10),
                   TextField(
                     controller: _amountController,
                     keyboardType: TextInputType.number,
+                    style: TextStyle(color: theme.textTheme.bodyLarge?.color),
                     decoration: const InputDecoration(labelText: 'Amount'),
                   ),
                   const SizedBox(height: 10),
@@ -627,10 +630,12 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                     items: categories.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
                     onChanged: (val) => setState(() => _category = val),
                     decoration: const InputDecoration(labelText: 'Category'),
+                    dropdownColor: theme.cardTheme.color,
                   ),
                   const SizedBox(height: 10),
                   TextField(
                     controller: _notesController,
+                    style: TextStyle(color: theme.textTheme.bodyLarge?.color),
                     decoration: const InputDecoration(labelText: 'Notes'),
                   ),
                   const SizedBox(height: 20),
@@ -863,7 +868,6 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                 keyboardType: TextInputType.number,
                 decoration: InputDecoration(
                   labelText: label,
-                  border: const OutlineInputBorder(),
                 ),
                 onChanged: (value) {
                   final numValue = double.tryParse(value) ?? 0.0;
@@ -923,22 +927,24 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
       }
     }
 
+    final theme = Theme.of(context);
+
     return Container(
       margin: const EdgeInsets.only(top: 16),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.grey[850],
+        color: theme.cardTheme.color,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Split Summary',
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.bold,
-              color: Colors.white,
+              color: theme.textTheme.bodyLarge?.color,
             ),
           ),
           const SizedBox(height: 12),
@@ -958,11 +964,11 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(name, style: const TextStyle(color: Colors.white70)),
+                      Text(name, style: TextStyle(color: theme.textTheme.bodyMedium?.color)),
                       Text(
                         '₹${entry.value.toStringAsFixed(2)}',
-                        style: const TextStyle(
-                          color: Colors.white,
+                        style: TextStyle(
+                          color: theme.textTheme.bodyLarge?.color,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -971,7 +977,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                 );
               },
             );
-          }).toList(),
+          }),
         ],
       ),
     );

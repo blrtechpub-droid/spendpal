@@ -15,6 +15,7 @@ class SmsExpenseModel {
   final DateTime? categorizedAt;
   final String? linkedExpenseId;
   final String smsSender;
+  final String? transactionType; // 'debit', 'credit', 'salary', 'credit_card_payment'
 
   SmsExpenseModel({
     required this.id,
@@ -31,6 +32,7 @@ class SmsExpenseModel {
     this.categorizedAt,
     this.linkedExpenseId,
     required this.smsSender,
+    this.transactionType,
   });
 
   /// Create from Firestore document
@@ -53,6 +55,7 @@ class SmsExpenseModel {
           : null,
       linkedExpenseId: data['linkedExpenseId'] as String?,
       smsSender: data['smsSender'] as String? ?? 'Unknown',
+      transactionType: data['transactionType'] as String?,
     );
   }
 
@@ -73,6 +76,7 @@ class SmsExpenseModel {
           categorizedAt != null ? Timestamp.fromDate(categorizedAt!) : null,
       'linkedExpenseId': linkedExpenseId,
       'smsSender': smsSender,
+      'transactionType': transactionType,
     };
   }
 
@@ -92,6 +96,7 @@ class SmsExpenseModel {
     DateTime? categorizedAt,
     String? linkedExpenseId,
     String? smsSender,
+    String? transactionType,
   }) {
     return SmsExpenseModel(
       id: id ?? this.id,
@@ -108,6 +113,7 @@ class SmsExpenseModel {
       categorizedAt: categorizedAt ?? this.categorizedAt,
       linkedExpenseId: linkedExpenseId ?? this.linkedExpenseId,
       smsSender: smsSender ?? this.smsSender,
+      transactionType: transactionType ?? this.transactionType,
     );
   }
 
@@ -119,4 +125,12 @@ class SmsExpenseModel {
 
   /// Check if expense is ignored
   bool get isIgnored => status == 'ignored';
+
+  /// Check if transaction is a credit (including salary)
+  bool get isCredit => transactionType == 'credit' ||
+                       transactionType == 'salary' ||
+                       transactionType == 'credit_card_payment';
+
+  /// Check if transaction is specifically a salary credit
+  bool get isSalary => transactionType == 'salary';
 }

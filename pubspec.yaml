@@ -60,10 +60,31 @@ dependencies:
   shared_preferences: ^2.3.4
   cloud_functions: ^6.0.2
   flutter_slidable: ^3.1.1
+  provider: ^6.1.2
 
   # SMS parsing for automatic expense tracking
   telephony: ^0.2.0
   permission_handler: ^11.3.1
+
+  # UPI payment integration for Indian users
+  # upi_india: ^3.0.1  # Temporarily disabled due to build issues
+  url_launcher: ^6.3.1
+  # crypto: ^3.0.6  # Already included as dependency
+
+  # Charts and analytics
+  fl_chart: ^0.69.0
+
+  # QR code scanning and generation
+  qr_code_scanner: ^1.0.1
+  qr_flutter: ^4.1.0
+
+  # CSV parsing for Splitwise import
+  csv: ^6.0.0
+
+  # Gmail API for email transaction import
+  googleapis: ^13.2.0
+  googleapis_auth: ^1.6.0
+  extension_google_sign_in_as_googleapis_auth: ^3.0.0
 
 dev_dependencies:
   flutter_test:

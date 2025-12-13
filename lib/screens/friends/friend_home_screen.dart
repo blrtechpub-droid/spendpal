@@ -68,6 +68,7 @@ class FriendHomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
+    final theme = Theme.of(context);
 
     return Scaffold(
       backgroundColor: const Color(0xFF1C1C1E),
@@ -205,7 +206,10 @@ class FriendHomeScreen extends StatelessWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: OutlinedButton(
-                    style: AppTheme.secondaryButtonStyle,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: theme.textTheme.bodyLarge?.color,
+                      side: BorderSide(color: theme.colorScheme.primary),
+                    ),
                     onPressed: () {
                       Navigator.push(
                         context,
