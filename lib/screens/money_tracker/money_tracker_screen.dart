@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:spendpal/models/money_tracker_model.dart';
 import 'package:spendpal/theme/app_theme.dart';
+import 'package:spendpal/screens/account/account_management_screen.dart';
 
 class MoneyTrackerScreen extends StatefulWidget {
   const MoneyTrackerScreen({Key? key}) : super(key: key);
@@ -97,6 +98,18 @@ class _MoneyTrackerScreenState extends State<MoneyTrackerScreen> {
         title: const Text('Money Tracker'),
         automaticallyImplyLeading: false,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.account_balance_wallet),
+            tooltip: 'Manage Accounts',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const AccountManagementScreen(),
+                ),
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.info_outline),
             onPressed: () {

@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:spendpal/screens/account/report_bug_screen.dart';
 import 'package:spendpal/screens/account/currency_selection_screen.dart';
 import 'package:spendpal/screens/account/features_screen.dart';
+import 'package:spendpal/screens/account/account_management_screen.dart';
 import 'package:spendpal/screens/analytics/analytics_screen.dart';
 import 'package:spendpal/screens/import/splitwise_import_screen.dart';
 import 'package:spendpal/services/currency_service.dart';
@@ -234,6 +235,20 @@ class _AccountScreenState extends State<AccountScreen> {
                     context,
                     MaterialPageRoute(
                       builder: (_) => const FeaturesScreen(),
+                    ),
+                  );
+                },
+              ),
+              _buildListTile(
+                context,
+                icon: Icons.account_balance_wallet,
+                title: 'Account Management',
+                subtitle: 'Manage bank accounts and credit cards',
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const AccountManagementScreen(),
                     ),
                   );
                 },
