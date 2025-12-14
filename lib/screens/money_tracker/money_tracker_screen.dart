@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:spendpal/models/money_tracker_model.dart';
 import 'package:spendpal/theme/app_theme.dart';
-import 'package:spendpal/screens/account/account_management_screen.dart';
 
 class MoneyTrackerScreen extends StatefulWidget {
   const MoneyTrackerScreen({Key? key}) : super(key: key);
@@ -14,6 +14,9 @@ class MoneyTrackerScreen extends StatefulWidget {
 
 class _MoneyTrackerScreenState extends State<MoneyTrackerScreen> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  bool _bankExpanded = false;
+  bool _creditCardExpanded = false;
 
   Future<Map<String, dynamic>> _getMoneyTrackerData() async {
     final currentUser = FirebaseAuth.instance.currentUser;
@@ -98,18 +101,6 @@ class _MoneyTrackerScreenState extends State<MoneyTrackerScreen> {
         title: const Text('Money Tracker'),
         automaticallyImplyLeading: false,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.account_balance_wallet),
-            tooltip: 'Manage Accounts',
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const AccountManagementScreen(),
-                ),
-              );
-            },
-          ),
           IconButton(
             icon: const Icon(Icons.info_outline),
             onPressed: () {
@@ -301,66 +292,148 @@ class _MoneyTrackerScreenState extends State<MoneyTrackerScreen> {
   }
 
   Widget _buildBankBalanceCard(ThemeData theme, double balance) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Colors.blue[400]!, Colors.blue[700]!],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+    final currentUser = _auth.currentUser;
+    if (currentUser == null) return const SizedBox();
+
+    return Column(
+      children: [
+        InkWell(
+          onTap: () {
+            setState(() => _bankExpanded = !_bankExpanded);
+          },
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Colors.blue[400]!, Colors.blue[700]!],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.blue.withValues(alpha: 0.3),
+                  blurRadius: 12,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(Icons.account_balance_wallet, color: Color(0xFFF8F8F8), size: 28),
+                    ),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Text(
+                        'Bank Accounts',
+                        style: TextStyle(
+                          color: Color(0xFFF8F8F8),
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    Icon(
+                      _bankExpanded ? Icons.expand_less : Icons.expand_more,
+                      color: const Color(0xFFF8F8F8),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  'Total Balance',
+                  style: TextStyle(
+                    color: const Color(0xFFF8F8F8).withValues(alpha: 0.8),
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '₹${balance.toStringAsFixed(2)}',
+                  style: const TextStyle(
+                    color: Color(0xFFF8F8F8),
+                    fontSize: 32,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.blue.withValues(alpha: 0.3),
-            blurRadius: 12,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
+        if (_bankExpanded)
+          StreamBuilder<QuerySnapshot>(
+            stream: _firestore
+                .collection('moneyAccounts')
+                .where('userId', isEqualTo: currentUser.uid)
+                .where('accountType', isEqualTo: 'bank')
+                .snapshots(),
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) {
+                return const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Center(child: CircularProgressIndicator()),
+                );
+              }
+
+              final accounts = snapshot.data!.docs
+                  .map((doc) => MoneyTrackerAccount.fromFirestore(doc))
+                  .toList();
+
+              return Container(
+                margin: const EdgeInsets.only(top: 8),
+                padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(8),
+                  color: theme.cardTheme.color,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: Colors.blue.withValues(alpha: 0.3),
+                  ),
                 ),
-                child: const Icon(Icons.account_balance_wallet, color: Color(0xFFF8F8F8), size: 28),
-              ),
-              const SizedBox(width: 12),
-              const Text(
-                'Bank Account',
-                style: TextStyle(
-                  color: Color(0xFFF8F8F8),
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (accounts.isEmpty)
+                      Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Text(
+                            'No bank accounts yet',
+                            style: TextStyle(
+                              color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.6),
+                            ),
+                          ),
+                        ),
+                      ),
+                    if (accounts.isNotEmpty)
+                      ...accounts.map((account) => _buildAccountTile(account, theme, 'bank')),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: () => _showAddBankAccountDialog(),
+                        icon: const Icon(Icons.add),
+                        label: const Text('Add Bank Account'),
+                        style: OutlinedButton.styleFrom(
+                          side: BorderSide(color: Colors.blue.withValues(alpha: 0.5)),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-            ],
+              );
+            },
           ),
-          const SizedBox(height: 20),
-          Text(
-            'Total Balance',
-            style: TextStyle(
-              color: const Color(0xFFF8F8F8).withValues(alpha: 0.8),
-              fontSize: 14,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            '₹${balance.toStringAsFixed(2)}',
-            style: const TextStyle(
-              color: Color(0xFFF8F8F8),
-              fontSize: 32,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ],
-      ),
+      ],
     );
   }
 
@@ -371,118 +444,199 @@ class _MoneyTrackerScreenState extends State<MoneyTrackerScreen> {
     double available,
   ) {
     final usagePercent = limit > 0 ? (spent / limit * 100) : 0.0;
+    final currentUser = _auth.currentUser;
+    if (currentUser == null) return const SizedBox();
 
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Colors.purple[400]!, Colors.purple[700]!],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.purple.withValues(alpha: 0.3),
-            blurRadius: 12,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.2),
+    return Column(
+      children: [
+        InkWell(
+          onTap: () {
+            setState(() => _creditCardExpanded = !_creditCardExpanded);
+          },
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Colors.purple[400]!, Colors.purple[700]!],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.purple.withValues(alpha: 0.3),
+                  blurRadius: 12,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(Icons.credit_card, color: Color(0xFFF8F8F8), size: 28),
+                    ),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Text(
+                        'Credit Cards',
+                        style: TextStyle(
+                          color: Color(0xFFF8F8F8),
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    Icon(
+                      _creditCardExpanded ? Icons.expand_less : Icons.expand_more,
+                      color: const Color(0xFFF8F8F8),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Spent',
+                          style: TextStyle(
+                            color: const Color(0xFFF8F8F8).withValues(alpha: 0.8),
+                            fontSize: 14,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '₹${spent.toStringAsFixed(2)}',
+                          style: const TextStyle(
+                            color: Color(0xFFF8F8F8),
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          'Available',
+                          style: TextStyle(
+                            color: const Color(0xFFF8F8F8).withValues(alpha: 0.8),
+                            fontSize: 14,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '₹${available.toStringAsFixed(2)}',
+                          style: const TextStyle(
+                            color: Color(0xFFF8F8F8),
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                ClipRRect(
                   borderRadius: BorderRadius.circular(8),
+                  child: LinearProgressIndicator(
+                    value: usagePercent / 100,
+                    backgroundColor: Colors.white.withValues(alpha: 0.2),
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      usagePercent > 80 ? Colors.red : const Color(0xFFF8F8F8),
+                    ),
+                    minHeight: 8,
+                  ),
                 ),
-                child: const Icon(Icons.credit_card, color: Color(0xFFF8F8F8), size: 28),
-              ),
-              const SizedBox(width: 12),
-              const Text(
-                'Credit Card',
-                style: TextStyle(
-                  color: Color(0xFFF8F8F8),
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
+                const SizedBox(height: 8),
+                Text(
+                  '${usagePercent.toStringAsFixed(1)}% of limit used',
+                  style: TextStyle(
+                    color: const Color(0xFFF8F8F8).withValues(alpha: 0.9),
+                    fontSize: 12,
+                  ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Spent',
-                    style: TextStyle(
-                      color: const Color(0xFFF8F8F8).withValues(alpha: 0.8),
-                      fontSize: 14,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '₹${spent.toStringAsFixed(2)}',
-                    style: const TextStyle(
-                      color: Color(0xFFF8F8F8),
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    'Available',
-                    style: TextStyle(
-                      color: const Color(0xFFF8F8F8).withValues(alpha: 0.8),
-                      fontSize: 14,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '₹${available.toStringAsFixed(2)}',
-                    style: const TextStyle(
-                      color: Color(0xFFF8F8F8),
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: LinearProgressIndicator(
-              value: usagePercent / 100,
-              backgroundColor: Colors.white.withValues(alpha: 0.2),
-              valueColor: AlwaysStoppedAnimation<Color>(
-                usagePercent > 80 ? Colors.red : const Color(0xFFF8F8F8),
-              ),
-              minHeight: 8,
+              ],
             ),
           ),
-          const SizedBox(height: 8),
-          Text(
-            '${usagePercent.toStringAsFixed(1)}% of limit used',
-            style: TextStyle(
-              color: const Color(0xFFF8F8F8).withValues(alpha: 0.9),
-              fontSize: 12,
-            ),
+        ),
+        if (_creditCardExpanded)
+          StreamBuilder<QuerySnapshot>(
+            stream: _firestore
+                .collection('moneyAccounts')
+                .where('userId', isEqualTo: currentUser.uid)
+                .where('accountType', isEqualTo: 'credit_card')
+                .snapshots(),
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) {
+                return const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Center(child: CircularProgressIndicator()),
+                );
+              }
+
+              final accounts = snapshot.data!.docs
+                  .map((doc) => MoneyTrackerAccount.fromFirestore(doc))
+                  .toList();
+
+              return Container(
+                margin: const EdgeInsets.only(top: 8),
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: theme.cardTheme.color,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: Colors.purple.withValues(alpha: 0.3),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (accounts.isEmpty)
+                      Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Text(
+                            'No credit cards yet',
+                            style: TextStyle(
+                              color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.6),
+                            ),
+                          ),
+                        ),
+                      ),
+                    if (accounts.isNotEmpty)
+                      ...accounts.map((account) => _buildAccountTile(account, theme, 'credit_card')),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: () => _showAddCreditCardDialog(),
+                        icon: const Icon(Icons.add),
+                        label: const Text('Add Credit Card'),
+                        style: OutlinedButton.styleFrom(
+                          side: BorderSide(color: Colors.purple.withValues(alpha: 0.5)),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
           ),
-        ],
-      ),
+      ],
     );
   }
 
@@ -568,7 +722,7 @@ class _MoneyTrackerScreenState extends State<MoneyTrackerScreen> {
           '• Monthly salary\n'
           '• Bank account balance\n'
           '• Credit card spending\n\n'
-          'SMS auto-detection will be enabled in a future update.',
+          'Tap on cards to expand and manage accounts.',
           style: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color),
         ),
         actions: [
@@ -577,6 +731,472 @@ class _MoneyTrackerScreenState extends State<MoneyTrackerScreen> {
             child: const Text('OK'),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildAccountTile(MoneyTrackerAccount account, ThemeData theme, String type) {
+    final isCreditCard = type == 'credit_card';
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: ListTile(
+        leading: Icon(
+          isCreditCard ? Icons.credit_card : Icons.account_balance,
+          color: isCreditCard ? Colors.purple : Colors.blue,
+        ),
+        title: Text(
+          account.accountName,
+          style: TextStyle(
+            fontWeight: FontWeight.w500,
+            color: theme.textTheme.bodyLarge?.color,
+          ),
+        ),
+        subtitle: isCreditCard && account.creditLimit != null
+            ? Text(
+                '₹${account.balance.toStringAsFixed(0)} / ₹${account.creditLimit!.toStringAsFixed(0)}',
+                style: TextStyle(color: theme.textTheme.bodyMedium?.color),
+              )
+            : null,
+        trailing: Text(
+          '₹${account.balance.toStringAsFixed(0)}',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 16,
+            color: theme.textTheme.bodyLarge?.color,
+          ),
+        ),
+        onTap: () {
+          if (isCreditCard) {
+            _showAddCreditCardDialog(account: account, accountId: account.accountId);
+          } else {
+            _showAddBankAccountDialog(account: account, accountId: account.accountId);
+          }
+        },
+      ),
+    );
+  }
+
+  void _showAddBankAccountDialog({MoneyTrackerAccount? account, String? accountId}) {
+    final formKey = GlobalKey<FormState>();
+    final nameController = TextEditingController(text: account?.accountName ?? '');
+    final balanceController = TextEditingController(
+      text: account != null ? account.balance.toStringAsFixed(2) : '',
+    );
+    bool isLoading = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) {
+          return Container(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(context).viewInsets.bottom,
+            ),
+            decoration: BoxDecoration(
+              color: Theme.of(context).cardTheme.color,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: Form(
+                key: formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(Icons.account_balance, color: Colors.blue, size: 28),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Text(
+                            account == null ? 'Add Bank Account' : 'Edit Bank Account',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: Theme.of(context).textTheme.bodyLarge?.color,
+                            ),
+                          ),
+                        ),
+                        if (account != null)
+                          IconButton(
+                            icon: const Icon(Icons.delete, color: AppTheme.errorColor),
+                            onPressed: () async {
+                              final confirm = await showDialog<bool>(
+                                context: context,
+                                builder: (ctx) => AlertDialog(
+                                  backgroundColor: Theme.of(context).cardTheme.color,
+                                  title: const Text('Delete Account'),
+                                  content: const Text('Are you sure you want to delete this account?'),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(ctx, false),
+                                      child: const Text('Cancel'),
+                                    ),
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(ctx, true),
+                                      style: TextButton.styleFrom(foregroundColor: AppTheme.errorColor),
+                                      child: const Text('Delete'),
+                                    ),
+                                  ],
+                                ),
+                              );
+                              if (confirm == true && accountId != null) {
+                                await _firestore.collection('moneyAccounts').doc(accountId).delete();
+                                if (context.mounted) {
+                                  Navigator.pop(context);
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('Account deleted')),
+                                  );
+                                }
+                              }
+                            },
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                    TextFormField(
+                      controller: nameController,
+                      decoration: InputDecoration(
+                        labelText: 'Account Name',
+                        hintText: 'e.g., HDFC Savings',
+                        prefixIcon: const Icon(Icons.account_balance),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        filled: true,
+                        fillColor: Theme.of(context).cardTheme.color,
+                      ),
+                      textCapitalization: TextCapitalization.words,
+                      validator: (v) => v?.trim().isEmpty ?? true ? 'Required' : null,
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: balanceController,
+                      decoration: InputDecoration(
+                        labelText: 'Current Balance',
+                        hintText: '0.00',
+                        prefixIcon: const Icon(Icons.currency_rupee),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        filled: true,
+                        fillColor: Theme.of(context).cardTheme.color,
+                      ),
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}'))],
+                      validator: (v) {
+                        if (v?.trim().isEmpty ?? true) return 'Required';
+                        if (double.tryParse(v!) == null) return 'Invalid number';
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 50,
+                      child: ElevatedButton(
+                        onPressed: isLoading
+                            ? null
+                            : () async {
+                                if (!formKey.currentState!.validate()) return;
+
+                                setModalState(() => isLoading = true);
+
+                                try {
+                                  final data = {
+                                    'userId': _auth.currentUser!.uid,
+                                    'accountType': 'bank',
+                                    'accountName': nameController.text.trim(),
+                                    'balance': double.parse(balanceController.text.trim()),
+                                    'lastUpdated': FieldValue.serverTimestamp(),
+                                  };
+
+                                  if (account == null) {
+                                    data['createdAt'] = FieldValue.serverTimestamp();
+                                    await _firestore.collection('moneyAccounts').add(data);
+                                  } else {
+                                    await _firestore.collection('moneyAccounts').doc(accountId).update(data);
+                                  }
+
+                                  if (context.mounted) {
+                                    Navigator.pop(context);
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(account == null ? 'Account added' : 'Account updated'),
+                                        backgroundColor: Colors.green,
+                                      ),
+                                    );
+                                  }
+                                } catch (e) {
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text('Error: $e'), backgroundColor: AppTheme.errorColor),
+                                    );
+                                  }
+                                } finally {
+                                  setModalState(() => isLoading = false);
+                                }
+                              },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blue,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        child: isLoading
+                            ? const SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                ),
+                              )
+                            : Text(account == null ? 'Add Account' : 'Update Account'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _showAddCreditCardDialog({MoneyTrackerAccount? account, String? accountId}) {
+    final formKey = GlobalKey<FormState>();
+    final nameController = TextEditingController(text: account?.accountName ?? '');
+    final limitController = TextEditingController(
+      text: account?.creditLimit != null ? account!.creditLimit!.toStringAsFixed(2) : '',
+    );
+    final spentController = TextEditingController(
+      text: account != null ? account.balance.toStringAsFixed(2) : '',
+    );
+    bool isLoading = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) {
+          return Container(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(context).viewInsets.bottom,
+            ),
+            decoration: BoxDecoration(
+              color: Theme.of(context).cardTheme.color,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: Form(
+                key: formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.purple.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(Icons.credit_card, color: Colors.purple, size: 28),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Text(
+                            account == null ? 'Add Credit Card' : 'Edit Credit Card',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: Theme.of(context).textTheme.bodyLarge?.color,
+                            ),
+                          ),
+                        ),
+                        if (account != null)
+                          IconButton(
+                            icon: const Icon(Icons.delete, color: AppTheme.errorColor),
+                            onPressed: () async {
+                              final confirm = await showDialog<bool>(
+                                context: context,
+                                builder: (ctx) => AlertDialog(
+                                  backgroundColor: Theme.of(context).cardTheme.color,
+                                  title: const Text('Delete Card'),
+                                  content: const Text('Are you sure you want to delete this credit card?'),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(ctx, false),
+                                      child: const Text('Cancel'),
+                                    ),
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(ctx, true),
+                                      style: TextButton.styleFrom(foregroundColor: AppTheme.errorColor),
+                                      child: const Text('Delete'),
+                                    ),
+                                  ],
+                                ),
+                              );
+                              if (confirm == true && accountId != null) {
+                                await _firestore.collection('moneyAccounts').doc(accountId).delete();
+                                if (context.mounted) {
+                                  Navigator.pop(context);
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('Card deleted')),
+                                  );
+                                }
+                              }
+                            },
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                    TextFormField(
+                      controller: nameController,
+                      decoration: InputDecoration(
+                        labelText: 'Card Name',
+                        hintText: 'e.g., HDFC Credit Card',
+                        prefixIcon: const Icon(Icons.credit_card),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        filled: true,
+                        fillColor: Theme.of(context).cardTheme.color,
+                      ),
+                      textCapitalization: TextCapitalization.words,
+                      validator: (v) => v?.trim().isEmpty ?? true ? 'Required' : null,
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: limitController,
+                      decoration: InputDecoration(
+                        labelText: 'Credit Limit',
+                        hintText: '0.00',
+                        prefixIcon: const Icon(Icons.account_balance_wallet),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        filled: true,
+                        fillColor: Theme.of(context).cardTheme.color,
+                      ),
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}'))],
+                      validator: (v) {
+                        if (v?.trim().isEmpty ?? true) return 'Required';
+                        final limit = double.tryParse(v!);
+                        if (limit == null || limit <= 0) return 'Must be > 0';
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: spentController,
+                      decoration: InputDecoration(
+                        labelText: 'Current Spending',
+                        hintText: '0.00',
+                        prefixIcon: const Icon(Icons.currency_rupee),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        filled: true,
+                        fillColor: Theme.of(context).cardTheme.color,
+                      ),
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}'))],
+                      validator: (v) {
+                        if (v?.trim().isEmpty ?? true) return 'Required';
+                        if (double.tryParse(v!) == null) return 'Invalid number';
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 50,
+                      child: ElevatedButton(
+                        onPressed: isLoading
+                            ? null
+                            : () async {
+                                if (!formKey.currentState!.validate()) return;
+
+                                final limit = double.parse(limitController.text.trim());
+                                final spent = double.parse(spentController.text.trim());
+
+                                if (spent > limit) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Spending cannot exceed credit limit'),
+                                      backgroundColor: AppTheme.errorColor,
+                                    ),
+                                  );
+                                  return;
+                                }
+
+                                setModalState(() => isLoading = true);
+
+                                try {
+                                  final data = {
+                                    'userId': _auth.currentUser!.uid,
+                                    'accountType': 'credit_card',
+                                    'accountName': nameController.text.trim(),
+                                    'balance': spent,
+                                    'creditLimit': limit,
+                                    'lastUpdated': FieldValue.serverTimestamp(),
+                                  };
+
+                                  if (account == null) {
+                                    data['createdAt'] = FieldValue.serverTimestamp();
+                                    await _firestore.collection('moneyAccounts').add(data);
+                                  } else {
+                                    await _firestore.collection('moneyAccounts').doc(accountId).update(data);
+                                  }
+
+                                  if (context.mounted) {
+                                    Navigator.pop(context);
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(account == null ? 'Card added' : 'Card updated'),
+                                        backgroundColor: Colors.green,
+                                      ),
+                                    );
+                                  }
+                                } catch (e) {
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text('Error: $e'), backgroundColor: AppTheme.errorColor),
+                                    );
+                                  }
+                                } finally {
+                                  setModalState(() => isLoading = false);
+                                }
+                              },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.purple,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        child: isLoading
+                            ? const SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                ),
+                              )
+                            : Text(account == null ? 'Add Card' : 'Update Card'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
       ),
     );
   }

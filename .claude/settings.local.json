@@ -34,7 +34,10 @@
       "mcp__ide__getDiagnostics",
       "Bash(firebase functions:config:get:*)",
       "Read(//Users/abhaysingh/Documents/devlopment/expenseTrackingApp/**)",
-      "Bash(firebase functions:log:*)"
+      "Bash(firebase functions:log:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)"
     ],
     "deny": [],
     "ask": []
