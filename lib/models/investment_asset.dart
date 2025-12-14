@@ -9,6 +9,7 @@ class InvestmentAsset {
   final String name; // Display name (e.g., "Axis Bluechip Fund", "RELIANCE")
   final String? symbol; // For stocks/ETFs: ticker symbol (e.g., "RELIANCE", "NIFTYBEES")
   final String? schemeCode; // For mutual funds: AMFI scheme code
+  final String? platform; // Investment platform (e.g., "zerodha", "groww", "5paisa", "etrade")
   final String currency; // Default: 'INR'
   final List<String> tags; // User-defined tags for categorization
   final String? goalId; // Link to financial goal (future feature)
@@ -22,6 +23,7 @@ class InvestmentAsset {
     required this.name,
     this.symbol,
     this.schemeCode,
+    this.platform,
     this.currency = 'INR',
     this.tags = const [],
     this.goalId,
@@ -38,6 +40,7 @@ class InvestmentAsset {
       'name': name,
       'symbol': symbol,
       'schemeCode': schemeCode,
+      'platform': platform,
       'currency': currency,
       'tags': tags,
       'goalId': goalId,
@@ -56,6 +59,7 @@ class InvestmentAsset {
       name: data['name'] ?? '',
       symbol: data['symbol'],
       schemeCode: data['schemeCode'],
+      platform: data['platform'],
       currency: data['currency'] ?? 'INR',
       tags: List<String>.from(data['tags'] ?? []),
       goalId: data['goalId'],
@@ -72,6 +76,7 @@ class InvestmentAsset {
     String? name,
     String? symbol,
     String? schemeCode,
+    String? platform,
     String? currency,
     List<String>? tags,
     String? goalId,
@@ -85,6 +90,7 @@ class InvestmentAsset {
       name: name ?? this.name,
       symbol: symbol ?? this.symbol,
       schemeCode: schemeCode ?? this.schemeCode,
+      platform: platform ?? this.platform,
       currency: currency ?? this.currency,
       tags: tags ?? this.tags,
       goalId: goalId ?? this.goalId,
@@ -123,6 +129,59 @@ class InvestmentAsset {
         return 'Property';
       default:
         return assetType;
+    }
+  }
+
+  /// Helper to get platform display name
+  String get platformDisplay {
+    if (platform == null) return 'Direct';
+
+    switch (platform!.toLowerCase()) {
+      case 'zerodha':
+        return 'Zerodha';
+      case 'groww':
+        return 'Groww';
+      case '5paisa':
+        return '5Paisa';
+      case 'upstox':
+        return 'Upstox';
+      case 'angelone':
+      case 'angel_one':
+        return 'Angel One';
+      case 'icici_direct':
+        return 'ICICI Direct';
+      case 'hdfc_securities':
+        return 'HDFC Securities';
+      case 'kotak_securities':
+        return 'Kotak Securities';
+      case 'sharekhan':
+        return 'Sharekhan';
+      case 'motilal_oswal':
+        return 'Motilal Oswal';
+      case 'etrade':
+        return 'E*TRADE';
+      case 'robinhood':
+        return 'Robinhood';
+      case 'webull':
+        return 'Webull';
+      case 'fidelity':
+        return 'Fidelity';
+      case 'charles_schwab':
+        return 'Charles Schwab';
+      case 'interactive_brokers':
+        return 'Interactive Brokers';
+      case 'coin_dcx':
+        return 'CoinDCX';
+      case 'wazirx':
+        return 'WazirX';
+      case 'paytm_money':
+        return 'Paytm Money';
+      case 'kite':
+        return 'Kite by Zerodha';
+      case 'other':
+        return 'Other';
+      default:
+        return platform!;
     }
   }
 }

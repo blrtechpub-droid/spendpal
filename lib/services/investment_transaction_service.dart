@@ -15,6 +15,7 @@ class InvestmentTransactionService {
     required String name,
     String? symbol,
     String? schemeCode,
+    String? platform,
     List<String> tags = const [],
   }) async {
     try {
@@ -31,6 +32,7 @@ class InvestmentTransactionService {
         name: name,
         symbol: symbol,
         schemeCode: schemeCode,
+        platform: platform,
         tags: tags,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),

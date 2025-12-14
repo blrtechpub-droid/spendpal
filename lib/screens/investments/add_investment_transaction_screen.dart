@@ -34,6 +34,7 @@ class _AddInvestmentTransactionScreenState
   final _symbolController = TextEditingController();
   final _schemeCodeController = TextEditingController();
   String _assetType = 'equity';
+  String? _platform;
 
   // Transaction fields
   String _transactionType = 'BUY';
@@ -124,6 +125,7 @@ class _AddInvestmentTransactionScreenState
           schemeCode: _schemeCodeController.text.isEmpty
               ? null
               : _schemeCodeController.text,
+          platform: _platform,
         );
 
         if (asset == null) {
@@ -443,6 +445,42 @@ class _AddInvestmentTransactionScreenState
             hintText: 'AMFI scheme code',
           ),
         ),
+      const SizedBox(height: 16),
+      DropdownButtonFormField<String>(
+        value: _platform,
+        decoration: const InputDecoration(
+          labelText: 'Platform (Optional)',
+          border: OutlineInputBorder(),
+          hintText: 'Where is this investment held?',
+        ),
+        items: const [
+          DropdownMenuItem(value: null, child: Text('None (Direct)')),
+          DropdownMenuItem(value: 'zerodha', child: Text('Zerodha')),
+          DropdownMenuItem(value: 'groww', child: Text('Groww')),
+          DropdownMenuItem(value: '5paisa', child: Text('5Paisa')),
+          DropdownMenuItem(value: 'upstox', child: Text('Upstox')),
+          DropdownMenuItem(value: 'angelone', child: Text('Angel One')),
+          DropdownMenuItem(value: 'icici_direct', child: Text('ICICI Direct')),
+          DropdownMenuItem(value: 'hdfc_securities', child: Text('HDFC Securities')),
+          DropdownMenuItem(value: 'kotak_securities', child: Text('Kotak Securities')),
+          DropdownMenuItem(value: 'sharekhan', child: Text('Sharekhan')),
+          DropdownMenuItem(value: 'motilal_oswal', child: Text('Motilal Oswal')),
+          DropdownMenuItem(value: 'etrade', child: Text('E*TRADE')),
+          DropdownMenuItem(value: 'robinhood', child: Text('Robinhood')),
+          DropdownMenuItem(value: 'webull', child: Text('Webull')),
+          DropdownMenuItem(value: 'fidelity', child: Text('Fidelity')),
+          DropdownMenuItem(value: 'charles_schwab', child: Text('Charles Schwab')),
+          DropdownMenuItem(value: 'paytm_money', child: Text('Paytm Money')),
+          DropdownMenuItem(value: 'coin_dcx', child: Text('CoinDCX')),
+          DropdownMenuItem(value: 'wazirx', child: Text('WazirX')),
+          DropdownMenuItem(value: 'other', child: Text('Other')),
+        ],
+        onChanged: (value) {
+          setState(() {
+            _platform = value;
+          });
+        },
+      ),
     ];
   }
 

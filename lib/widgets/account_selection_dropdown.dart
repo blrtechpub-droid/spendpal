@@ -147,10 +147,15 @@ class _AccountSelectionDropdownState extends State<AccountSelectionDropdown> {
     for (final doc in snapshot.docs) {
       final asset = InvestmentAsset.fromFirestore(doc);
 
+      // Show platform if available
+      final displayInfo = asset.platform != null
+          ? '${asset.assetTypeDisplay} (${asset.platformDisplay})'
+          : asset.assetTypeDisplay;
+
       items.add(AccountItem(
         id: asset.assetId,
         name: asset.name,
-        displayInfo: asset.assetTypeDisplay,
+        displayInfo: displayInfo,
         icon: _getInvestmentIcon(asset.assetType),
         color: _getInvestmentColor(asset.assetType),
         source: AccountSource.investment,
