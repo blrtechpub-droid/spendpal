@@ -6,8 +6,10 @@ import 'package:spendpal/models/sms_expense_model.dart';
 import 'package:spendpal/services/sms_expense_service.dart';
 import 'package:spendpal/services/sms_listener_service.dart';
 import 'package:spendpal/services/currency_service.dart';
+import 'package:spendpal/services/transaction_categorization_service.dart';
 import 'package:spendpal/theme/app_theme.dart';
 import 'package:spendpal/widgets/empty_state_widget.dart';
+import 'package:spendpal/widgets/transaction_categorization_dialog.dart';
 
 class SmsExpensesScreen extends StatefulWidget {
   const SmsExpensesScreen({super.key});
@@ -247,74 +249,6 @@ class _SmsExpensesScreenState extends State<SmsExpensesScreen> {
     );
   }
 
-  Future<void> _categorizeAsPersonal(SmsExpenseModel smsExpense) async {
-    try {
-      final expenseId = await SmsExpenseService.categorizeAsPersonal(smsExpense);
-
-      if (mounted) {
-        if (expenseId != null) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Added to personal expenses'),
-              backgroundColor: AppTheme.tealAccent,
-              duration: Duration(seconds: 2),
-            ),
-          );
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Failed to add expense'),
-              backgroundColor: AppTheme.errorColor,
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: $e'),
-            backgroundColor: AppTheme.errorColor,
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _categorizeAsSalary(SmsExpenseModel smsExpense) async {
-    try {
-      final salaryId = await SmsExpenseService.categorizeAsSalary(smsExpense);
-
-      if (mounted) {
-        if (salaryId != null) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Added to salary records'),
-              backgroundColor: Colors.green,
-              duration: Duration(seconds: 2),
-            ),
-          );
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Failed to add salary'),
-              backgroundColor: AppTheme.errorColor,
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: $e'),
-            backgroundColor: AppTheme.errorColor,
-          ),
-        );
-      }
-    }
-  }
-
   Future<void> _shareWithFriendOrGroup(SmsExpenseModel smsExpense) async {
     // Navigate to add expense screen with pre-filled data
     final result = await Navigator.pushNamed(
@@ -335,6 +269,221 @@ class _SmsExpensesScreenState extends State<SmsExpensesScreen> {
     // If expense was created, mark SMS expense as categorized
     if (result != null && result is String) {
       await SmsExpenseService.markAsCategorized(smsExpense.id, result);
+    }
+  }
+
+  Future<void> _showCategorizationDialog(SmsExpenseModel smsExpense) async {
+    final result = await showDialog<TransactionCategorizationResult>(
+      context: context,
+      builder: (context) => TransactionCategorizationDialog(
+        title: smsExpense.merchant,
+        amount: smsExpense.amount,
+        transactionType: smsExpense.isCredit ? TransactionType.credit : TransactionType.debit,
+        description: smsExpense.accountInfo,
+      ),
+    );
+
+    if (result == null) return;
+
+    // Show loading indicator
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Row(
+            children: [
+              SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
+              ),
+              SizedBox(width: 12),
+              Text('Categorizing...'),
+            ],
+          ),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+
+    // Prepare metadata
+    final metadata = {
+      'sender': smsExpense.smsSender,
+      'rawSms': smsExpense.rawSms,
+      'transactionId': smsExpense.transactionId,
+      'accountInfo': smsExpense.accountInfo,
+      'parsedAt': smsExpense.parsedAt.toIso8601String(),
+      'smsExpenseId': smsExpense.id,
+    };
+
+    String? recordId;
+
+    // Call appropriate service method based on category
+    try {
+      switch (result.category) {
+        case 'salary':
+          recordId = await TransactionCategorizationService.categorizeSalary(
+            transactionId: smsExpense.id,
+            transactionSource: 'sms',
+            amount: smsExpense.amount,
+            date: smsExpense.date,
+            description: smsExpense.merchant,
+            accountId: result.accountId,
+            accountSource: result.accountSource,
+            account: result.account,
+            notes: result.notes,
+            metadata: metadata,
+          );
+          break;
+
+        case 'investment_return':
+          recordId = await TransactionCategorizationService.categorizeInvestmentReturn(
+            transactionId: smsExpense.id,
+            transactionSource: 'sms',
+            amount: smsExpense.amount,
+            date: smsExpense.date,
+            description: smsExpense.merchant,
+            accountId: result.accountId,
+            accountSource: result.accountSource,
+            account: result.account,
+            notes: result.notes,
+            metadata: metadata,
+          );
+          break;
+
+        case 'cashback':
+          recordId = await TransactionCategorizationService.categorizeCashback(
+            transactionId: smsExpense.id,
+            transactionSource: 'sms',
+            amount: smsExpense.amount,
+            date: smsExpense.date,
+            description: smsExpense.merchant,
+            accountId: result.accountId,
+            accountSource: result.accountSource,
+            account: result.account,
+            notes: result.notes,
+            metadata: metadata,
+          );
+          break;
+
+        case 'refund':
+          recordId = await TransactionCategorizationService.categorizeRefund(
+            transactionId: smsExpense.id,
+            transactionSource: 'sms',
+            amount: smsExpense.amount,
+            date: smsExpense.date,
+            description: smsExpense.merchant,
+            accountId: result.accountId,
+            accountSource: result.accountSource,
+            account: result.account,
+            notes: result.notes,
+            metadata: metadata,
+          );
+          break;
+
+        case 'other_income':
+          recordId = await TransactionCategorizationService.categorizeOtherIncome(
+            transactionId: smsExpense.id,
+            transactionSource: 'sms',
+            amount: smsExpense.amount,
+            date: smsExpense.date,
+            description: smsExpense.merchant,
+            accountId: result.accountId,
+            accountSource: result.accountSource,
+            account: result.account,
+            notes: result.notes,
+            metadata: metadata,
+          );
+          break;
+
+        case 'expense':
+          recordId = await TransactionCategorizationService.categorizeExpense(
+            transactionId: smsExpense.id,
+            transactionSource: 'sms',
+            amount: smsExpense.amount,
+            date: smsExpense.date,
+            description: smsExpense.merchant,
+            accountId: result.accountId,
+            accountSource: result.accountSource,
+            account: result.account,
+            notes: result.notes,
+            category: smsExpense.category,
+            metadata: metadata,
+          );
+          break;
+
+        case 'investment':
+          recordId = await TransactionCategorizationService.categorizeInvestment(
+            transactionId: smsExpense.id,
+            transactionSource: 'sms',
+            amount: smsExpense.amount,
+            date: smsExpense.date,
+            description: smsExpense.merchant,
+            accountId: result.accountId,
+            accountSource: result.accountSource,
+            account: result.account,
+            notes: result.notes,
+            metadata: metadata,
+          );
+          break;
+
+        case 'loan_payment':
+          recordId = await TransactionCategorizationService.categorizeLoanPayment(
+            transactionId: smsExpense.id,
+            transactionSource: 'sms',
+            amount: smsExpense.amount,
+            date: smsExpense.date,
+            description: smsExpense.merchant,
+            accountId: result.accountId,
+            accountSource: result.accountSource,
+            account: result.account,
+            notes: result.notes,
+            metadata: metadata,
+          );
+          break;
+
+        case 'transfer':
+          recordId = await TransactionCategorizationService.categorizeTransfer(
+            transactionId: smsExpense.id,
+            transactionSource: 'sms',
+            amount: smsExpense.amount,
+            date: smsExpense.date,
+            description: smsExpense.merchant,
+            accountId: result.accountId,
+            accountSource: result.accountSource,
+            account: result.account,
+            notes: result.notes,
+            metadata: metadata,
+          );
+          break;
+      }
+
+      if (mounted) {
+        if (recordId != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Successfully categorized as ${result.category.replaceAll('_', ' ')}'),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Failed to categorize transaction'),
+              backgroundColor: AppTheme.errorColor,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: AppTheme.errorColor,
+          ),
+        );
+      }
     }
   }
 
@@ -456,96 +605,40 @@ class _SmsExpensesScreenState extends State<SmsExpensesScreen> {
               ),
             ),
             const SizedBox(height: 20),
-            // Show Salary button in modal for credit transactions
-            smsExpense.isCredit
-                ? Column(
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: ElevatedButton.icon(
-                              onPressed: () {
-                                Navigator.pop(context);
-                                _categorizeAsPersonal(smsExpense);
-                              },
-                              icon: const Icon(Icons.person, size: 18),
-                              label: const Text('Personal'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: AppTheme.tealAccent,
-                                foregroundColor: theme.textTheme.bodyLarge?.color,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: ElevatedButton.icon(
-                              onPressed: () {
-                                Navigator.pop(context);
-                                _categorizeAsSalary(smsExpense);
-                              },
-                              icon: const Icon(Icons.account_balance_wallet, size: 18),
-                              label: const Text('Salary'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.green,
-                                foregroundColor: Colors.white,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          onPressed: () {
-                            Navigator.pop(context);
-                            _shareWithFriendOrGroup(smsExpense);
-                          },
-                          icon: const Icon(Icons.group),
-                          label: const Text('Share with Friends/Group'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: theme.cardTheme.color,
-                            foregroundColor: AppTheme.tealAccent,
-                            side: const BorderSide(color: AppTheme.tealAccent),
-                          ),
-                        ),
-                      ),
-                    ],
-                  )
-                : Row(
-                    children: [
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: () {
-                            Navigator.pop(context);
-                            _categorizeAsPersonal(smsExpense);
-                          },
-                          icon: const Icon(Icons.person),
-                          label: const Text('Personal'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppTheme.tealAccent,
-                            foregroundColor: theme.textTheme.bodyLarge?.color,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: () {
-                            Navigator.pop(context);
-                            _shareWithFriendOrGroup(smsExpense);
-                          },
-                          icon: const Icon(Icons.group),
-                          label: const Text('Share'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: theme.cardTheme.color,
-                            foregroundColor: AppTheme.tealAccent,
-                            side: const BorderSide(color: AppTheme.tealAccent),
-                          ),
-                        ),
-                      ),
-                    ],
+            // Action buttons
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _showCategorizationDialog(smsExpense);
+                    },
+                    icon: const Icon(Icons.category),
+                    label: const Text('Categorize'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.tealAccent,
+                      foregroundColor: Colors.white,
+                    ),
                   ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _shareWithFriendOrGroup(smsExpense);
+                    },
+                    icon: const Icon(Icons.group),
+                    label: const Text('Share'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppTheme.tealAccent,
+                      side: const BorderSide(color: AppTheme.tealAccent),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
       ),
@@ -804,79 +897,37 @@ class _SmsExpensesScreenState extends State<SmsExpensesScreen> {
                 ],
               ),
               const SizedBox(height: 12),
-              // Show Salary button only for credit transactions
-              smsExpense.isCredit
-                  ? Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: () => _categorizeAsPersonal(smsExpense),
-                            icon: const Icon(Icons.person, size: 14),
-                            label: const Text('Personal', style: TextStyle(fontSize: 12)),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: AppTheme.tealAccent,
-                              side: const BorderSide(color: AppTheme.tealAccent),
-                              padding: const EdgeInsets.symmetric(vertical: 8),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: () => _categorizeAsSalary(smsExpense),
-                            icon: const Icon(Icons.account_balance_wallet, size: 14),
-                            label: const Text('Salary', style: TextStyle(fontSize: 12)),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: Colors.green,
-                              side: const BorderSide(color: Colors.green),
-                              padding: const EdgeInsets.symmetric(vertical: 8),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: () => _shareWithFriendOrGroup(smsExpense),
-                            icon: const Icon(Icons.group, size: 14),
-                            label: const Text('Share', style: TextStyle(fontSize: 12)),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: theme.textTheme.bodyLarge?.color,
-                              side: const BorderSide(color: AppTheme.dividerColor),
-                              padding: const EdgeInsets.symmetric(vertical: 8),
-                            ),
-                          ),
-                        ),
-                      ],
-                    )
-                  : Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: () => _categorizeAsPersonal(smsExpense),
-                            icon: const Icon(Icons.person, size: 16),
-                            label: const Text('Personal'),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: AppTheme.tealAccent,
-                              side: const BorderSide(color: AppTheme.tealAccent),
-                              padding: const EdgeInsets.symmetric(vertical: 8),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: () => _shareWithFriendOrGroup(smsExpense),
-                            icon: const Icon(Icons.group, size: 16),
-                            label: const Text('Share'),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: theme.textTheme.bodyLarge?.color,
-                              side: const BorderSide(color: AppTheme.dividerColor),
-                              padding: const EdgeInsets.symmetric(vertical: 8),
-                            ),
-                          ),
-                        ),
-                      ],
+              // Categorize button (new unified approach)
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () => _showCategorizationDialog(smsExpense),
+                      icon: const Icon(Icons.category, size: 18),
+                      label: const Text('Categorize'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.tealAccent,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        elevation: 0,
+                      ),
                     ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => _shareWithFriendOrGroup(smsExpense),
+                      icon: const Icon(Icons.group, size: 18),
+                      label: const Text('Share'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: theme.textTheme.bodyLarge?.color,
+                        side: const BorderSide(color: AppTheme.dividerColor),
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ],
           ),
         ),
