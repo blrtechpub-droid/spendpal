@@ -2,23 +2,55 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:spendpal/models/money_tracker_model.dart';
+import 'package:spendpal/models/investment_asset.dart';
 import 'package:spendpal/theme/app_theme.dart';
 
-/// Reusable dropdown widget for selecting bank accounts or credit cards
+/// Account source type for categorization
+enum AccountSource {
+  money,       // Bank or Credit Card
+  investment,  // Investment Asset
+}
+
+/// Unified account item for dropdown
+class AccountItem {
+  final String id;
+  final String name;
+  final String displayInfo;
+  final IconData icon;
+  final Color color;
+  final AccountSource source;
+  final dynamic account; // MoneyTrackerAccount or InvestmentAsset
+
+  AccountItem({
+    required this.id,
+    required this.name,
+    required this.displayInfo,
+    required this.icon,
+    required this.color,
+    required this.source,
+    required this.account,
+  });
+}
+
+/// Enhanced dropdown widget for selecting bank accounts, credit cards, or investments
 class AccountSelectionDropdown extends StatefulWidget {
   final String? selectedAccountId;
-  final Function(String? accountId, MoneyTrackerAccount? account) onAccountSelected;
-  final String? accountType; // 'bank', 'credit_card', or null for both
+  final Function(String? accountId, AccountSource? source, dynamic account) onAccountSelected;
+  final String? accountType; // 'bank', 'credit_card', or null for all money accounts
+  final bool includeInvestments; // Include investment assets
   final String label;
   final IconData icon;
+  final bool required;
 
   const AccountSelectionDropdown({
     super.key,
     this.selectedAccountId,
     required this.onAccountSelected,
     this.accountType,
+    this.includeInvestments = false,
     this.label = 'Select Account',
     this.icon = Icons.account_balance_wallet,
+    this.required = false,
   });
 
   @override
@@ -29,7 +61,7 @@ class _AccountSelectionDropdownState extends State<AccountSelectionDropdown> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   String? _selectedAccountId;
-  List<MoneyTrackerAccount> _accounts = [];
+  List<AccountItem> _accountItems = [];
   bool _isLoading = true;
 
   @override
@@ -49,23 +81,19 @@ class _AccountSelectionDropdownState extends State<AccountSelectionDropdown> {
         return;
       }
 
-      Query query = _firestore
-          .collection('moneyAccounts')
-          .where('userId', isEqualTo: currentUser.uid);
+      final items = <AccountItem>[];
 
-      // Filter by account type if specified
-      if (widget.accountType != null) {
-        query = query.where('accountType', isEqualTo: widget.accountType);
+      // Load money accounts (banks and credit cards)
+      await _loadMoneyAccounts(currentUser.uid, items);
+
+      // Load investment assets if enabled
+      if (widget.includeInvestments) {
+        await _loadInvestmentAssets(currentUser.uid, items);
       }
-
-      final snapshot = await query.get();
-      final accounts = snapshot.docs
-          .map((doc) => MoneyTrackerAccount.fromFirestore(doc))
-          .toList();
 
       if (mounted) {
         setState(() {
-          _accounts = accounts;
+          _accountItems = items;
           _isLoading = false;
         });
       }
@@ -82,13 +110,223 @@ class _AccountSelectionDropdownState extends State<AccountSelectionDropdown> {
     }
   }
 
-  MoneyTrackerAccount? _getSelectedAccount() {
+  Future<void> _loadMoneyAccounts(String userId, List<AccountItem> items) async {
+    Query query = _firestore
+        .collection('moneyAccounts')
+        .where('userId', isEqualTo: userId);
+
+    // Filter by account type if specified
+    if (widget.accountType != null) {
+      query = query.where('accountType', isEqualTo: widget.accountType);
+    }
+
+    final snapshot = await query.get();
+
+    for (final doc in snapshot.docs) {
+      final account = MoneyTrackerAccount.fromFirestore(doc);
+      final isCreditCard = account.accountType == 'credit_card';
+
+      items.add(AccountItem(
+        id: account.accountId,
+        name: account.accountName,
+        displayInfo: '₹${account.balance.toStringAsFixed(0)}',
+        icon: isCreditCard ? Icons.credit_card : Icons.account_balance,
+        color: isCreditCard ? Colors.purple : Colors.blue,
+        source: AccountSource.money,
+        account: account,
+      ));
+    }
+  }
+
+  Future<void> _loadInvestmentAssets(String userId, List<AccountItem> items) async {
+    final snapshot = await _firestore
+        .collection('investmentAssets')
+        .where('userId', isEqualTo: userId)
+        .get();
+
+    for (final doc in snapshot.docs) {
+      final asset = InvestmentAsset.fromFirestore(doc);
+
+      items.add(AccountItem(
+        id: asset.assetId,
+        name: asset.name,
+        displayInfo: asset.assetTypeDisplay,
+        icon: _getInvestmentIcon(asset.assetType),
+        color: _getInvestmentColor(asset.assetType),
+        source: AccountSource.investment,
+        account: asset,
+      ));
+    }
+  }
+
+  IconData _getInvestmentIcon(String assetType) {
+    switch (assetType) {
+      case 'mutual_fund':
+        return Icons.trending_up;
+      case 'equity':
+      case 'etf':
+        return Icons.show_chart;
+      case 'fd':
+      case 'rd':
+        return Icons.savings;
+      case 'gold':
+        return Icons.diamond;
+      case 'ppf':
+      case 'epf':
+      case 'nps':
+        return Icons.account_balance_wallet;
+      case 'crypto':
+        return Icons.currency_bitcoin;
+      case 'property':
+        return Icons.home;
+      default:
+        return Icons.pie_chart;
+    }
+  }
+
+  Color _getInvestmentColor(String assetType) {
+    switch (assetType) {
+      case 'mutual_fund':
+        return Colors.green;
+      case 'equity':
+      case 'etf':
+        return Colors.teal;
+      case 'fd':
+      case 'rd':
+        return Colors.orange;
+      case 'gold':
+        return Colors.amber;
+      case 'ppf':
+      case 'epf':
+      case 'nps':
+        return Colors.indigo;
+      case 'crypto':
+        return Colors.deepOrange;
+      case 'property':
+        return Colors.brown;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  AccountItem? _getSelectedItem() {
     if (_selectedAccountId == null) return null;
     try {
-      return _accounts.firstWhere((account) => account.accountId == _selectedAccountId);
+      return _accountItems.firstWhere((item) => item.id == _selectedAccountId);
     } catch (e) {
       return null;
     }
+  }
+
+  List<Widget> _buildGroupedDropdownItems() {
+    final items = <Widget>[];
+
+    // Add "None" option if not required
+    if (!widget.required) {
+      items.add(
+        const DropdownMenuItem<String>(
+          value: null,
+          child: Text('None (Optional)'),
+        ),
+      );
+    }
+
+    // Group items by source
+    final moneyAccounts = _accountItems.where((item) => item.source == AccountSource.money).toList();
+    final investments = _accountItems.where((item) => item.source == AccountSource.investment).toList();
+
+    // Add money accounts section
+    if (moneyAccounts.isNotEmpty) {
+      // Group header for banks/cards
+      if (widget.includeInvestments) {
+        items.add(
+          const DropdownMenuItem<String>(
+            enabled: false,
+            value: '__header_money__',
+            child: Padding(
+              padding: EdgeInsets.only(left: 8),
+              child: Text(
+                'BANK ACCOUNTS & CREDIT CARDS',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey,
+                ),
+              ),
+            ),
+          ),
+        );
+      }
+
+      // Add money account items
+      for (final item in moneyAccounts) {
+        items.add(_buildDropdownItem(item));
+      }
+    }
+
+    // Add investments section
+    if (investments.isNotEmpty) {
+      // Group header for investments
+      items.add(
+        const DropdownMenuItem<String>(
+          enabled: false,
+          value: '__header_investments__',
+          child: Padding(
+            padding: EdgeInsets.only(left: 8, top: 8),
+            child: Text(
+              'INVESTMENTS',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey,
+              ),
+            ),
+          ),
+        ),
+      );
+
+      // Add investment items
+      for (final item in investments) {
+        items.add(_buildDropdownItem(item));
+      }
+    }
+
+    return items;
+  }
+
+  DropdownMenuItem<String> _buildDropdownItem(AccountItem item) {
+    return DropdownMenuItem<String>(
+      value: item.id,
+      child: Padding(
+        padding: const EdgeInsets.only(left: 8),
+        child: Row(
+          children: [
+            Icon(item.icon, color: item.color, size: 20),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    item.name,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 14),
+                  ),
+                  Text(
+                    item.displayInfo,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -115,7 +353,7 @@ class _AccountSelectionDropdownState extends State<AccountSelectionDropdown> {
       );
     }
 
-    if (_accounts.isEmpty) {
+    if (_accountItems.isEmpty) {
       return Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
@@ -127,7 +365,7 @@ class _AccountSelectionDropdownState extends State<AccountSelectionDropdown> {
         ),
         child: Row(
           children: [
-            Icon(
+            const Icon(
               Icons.warning,
               color: AppTheme.orangeAccent,
               size: 20,
@@ -135,7 +373,9 @@ class _AccountSelectionDropdownState extends State<AccountSelectionDropdown> {
             const SizedBox(width: 12),
             Expanded(
               child: Text(
-                'No accounts found. Add an account in Account Management.',
+                widget.includeInvestments
+                    ? 'No accounts or investments found. Add them in Account Management or Investments.'
+                    : 'No accounts found. Add an account in Account Management.',
                 style: TextStyle(
                   fontSize: 13,
                   color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.8),
@@ -148,7 +388,7 @@ class _AccountSelectionDropdownState extends State<AccountSelectionDropdown> {
     }
 
     return DropdownButtonFormField<String>(
-      value: _selectedAccountId,
+      initialValue: _selectedAccountId,
       decoration: InputDecoration(
         labelText: widget.label,
         prefixIcon: Icon(widget.icon),
@@ -160,52 +400,26 @@ class _AccountSelectionDropdownState extends State<AccountSelectionDropdown> {
       ),
       style: TextStyle(color: theme.textTheme.bodyLarge?.color),
       dropdownColor: theme.cardTheme.color,
-      items: [
-        const DropdownMenuItem<String>(
-          value: null,
-          child: Text('None (Optional)'),
-        ),
-        ..._accounts.map((account) {
-          final icon = account.accountType == 'credit_card'
-              ? Icons.credit_card
-              : Icons.account_balance;
-          final color = account.accountType == 'credit_card'
-              ? Colors.purple
-              : Colors.blue;
-
-          return DropdownMenuItem<String>(
-            value: account.accountId,
-            child: Row(
-              children: [
-                Icon(icon, color: color, size: 20),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    account.accountName,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                Text(
-                  '₹${account.balance.toStringAsFixed(0)}',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.6),
-                  ),
-                ),
-              ],
-            ),
-          );
-        }).toList(),
-      ],
+      isExpanded: true,
+      items: _buildGroupedDropdownItems().cast<DropdownMenuItem<String>>(),
       onChanged: (value) {
+        // Ignore header selections
+        if (value?.startsWith('__header_') ?? false) {
+          return;
+        }
+
         setState(() => _selectedAccountId = value);
-        final account = _getSelectedAccount();
-        widget.onAccountSelected(value, account);
+        final item = _getSelectedItem();
+        widget.onAccountSelected(value, item?.source, item?.account);
       },
-      validator: (value) {
-        // Optional field by default
-        return null;
-      },
+      validator: widget.required
+          ? (value) {
+              if (value == null || value.isEmpty) {
+                return 'Please select an account';
+              }
+              return null;
+            }
+          : null,
     );
   }
 }
