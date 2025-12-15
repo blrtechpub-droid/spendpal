@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:spendpal/theme/app_theme.dart';
 import 'package:spendpal/screens/sms_expenses/sms_expenses_screen.dart';
-import 'package:spendpal/screens/investment/investment_sms_review_screen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
@@ -9,7 +8,7 @@ import 'package:spendpal/screens/expense/expense_detail_screen.dart';
 
 /// Auto-Import tab combines:
 /// 1. Pending SMS expenses (queue)
-/// 2. Pending investment SMS (queue)
+/// 2. Pending email transactions (queue)
 /// 3. Already-categorized auto-imported expenses
 class AutoImportTab extends StatefulWidget {
   const AutoImportTab({super.key});
@@ -39,7 +38,7 @@ class _AutoImportTabState extends State<AutoImportTab> {
                 _buildQuickAccessCard(
                   context,
                   title: 'SMS Transactions',
-                  subtitle: 'Review detected transactions from SMS',
+                  subtitle: 'Review and categorize transactions from SMS',
                   icon: Icons.message,
                   color: AppTheme.tealAccent,
                   onTap: () {
@@ -54,24 +53,8 @@ class _AutoImportTabState extends State<AutoImportTab> {
                 const SizedBox(height: 12),
                 _buildQuickAccessCard(
                   context,
-                  title: 'Investment SMS',
-                  subtitle: 'Review investment transactions from SMS',
-                  icon: Icons.trending_up,
-                  color: Colors.green,
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const InvestmentSmsReviewScreen(),
-                      ),
-                    );
-                  },
-                ),
-                const SizedBox(height: 12),
-                _buildQuickAccessCard(
-                  context,
                   title: 'Email Transactions',
-                  subtitle: 'Review transactions from email alerts',
+                  subtitle: 'Review and categorize transactions from email',
                   icon: Icons.email,
                   color: Colors.blue,
                   onTap: () {
