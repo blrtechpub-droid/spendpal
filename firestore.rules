@@ -220,6 +220,63 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // Money Accounts collection (Bank accounts and Credit cards)
+    match /moneyAccounts/{accountId} {
+      // Users can read their own money accounts
+      allow read: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid;
+
+      // Users can create money accounts for themselves
+      allow create: if isAuthenticated() &&
+        request.resource.data.userId == request.auth.uid;
+
+      // Users can update their own money accounts
+      allow update: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid;
+
+      // Users can delete their own money accounts
+      allow delete: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid;
+    }
+
+    // Salary Records collection
+    match /salaryRecords/{salaryId} {
+      // Users can read their own salary records
+      allow read: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid;
+
+      // Users can create salary records for themselves
+      allow create: if isAuthenticated() &&
+        request.resource.data.userId == request.auth.uid;
+
+      // Users can update their own salary records
+      allow update: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid;
+
+      // Users can delete their own salary records
+      allow delete: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid;
+    }
+
+    // Email Transactions collection
+    match /email_transactions/{transactionId} {
+      // Users can read their own email transactions
+      allow read: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid;
+
+      // Users can create email transactions for themselves
+      allow create: if isAuthenticated() &&
+        request.resource.data.userId == request.auth.uid;
+
+      // Users can update their own email transactions
+      allow update: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid;
+
+      // Users can delete their own email transactions
+      allow delete: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid;
+    }
+
     // SMS Expenses collection
     match /sms_expenses/{smsExpenseId} {
       // Users can read their own SMS expenses

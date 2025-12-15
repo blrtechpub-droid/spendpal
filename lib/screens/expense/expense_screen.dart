@@ -32,7 +32,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
   final List<String> _selectedFriends = [];
 
   // New variables for group/friends selection
-  String _splitType = 'friends'; // 'friends' or 'group'
+  String _splitType = 'personal'; // 'personal', 'friends', or 'group'
   String? _selectedGroupId;
   List<Map<String, dynamic>> _friends = [];
   List<Map<String, dynamic>> _groups = [];
@@ -141,17 +141,24 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
           // If a group is preselected (e.g., categorizing personal expense to group), use that
           _splitType = 'group';
           _selectedGroupId = widget.preSelectedGroupId;
-        } else if (data['groupId'] != null) {
-          // Load from existing data
+        } else if (data['groupId'] != null && (data['groupId'] as String).isNotEmpty) {
+          // Load from existing data - has a group
           _splitType = 'group';
           _selectedGroupId = data['groupId'];
         } else {
-          _splitType = 'friends';
-          _selectedFriends.clear();
+          // Check if it's a personal expense or friends expense
           final splitWith = List<String>.from(data['splitWith'] ?? []);
-          // Remove current user from the list (they're added automatically in calculations)
           final currentUserId = FirebaseAuth.instance.currentUser?.uid;
-          _selectedFriends.addAll(splitWith.where((uid) => uid != currentUserId));
+
+          if (splitWith.length == 1 && splitWith.first == currentUserId) {
+            // Personal expense (only user in splitWith)
+            _splitType = 'personal';
+          } else {
+            // Friends expense
+            _splitType = 'friends';
+            _selectedFriends.clear();
+            _selectedFriends.addAll(splitWith.where((uid) => uid != currentUserId));
+          }
         }
 
         // Load custom splits if not equal
@@ -364,8 +371,13 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
       // Get split members based on type
       List<String> splitWith = [];
       String? groupId;
+      final currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
 
-      if (_splitType == 'group') {
+      if (_splitType == 'personal') {
+        // Personal expense - no splitting
+        groupId = '';
+        splitWith = [currentUserId];
+      } else if (_splitType == 'group') {
         groupId = _selectedGroupId;
         // Get group members
         final groupDoc = await FirebaseFirestore.instance
@@ -377,7 +389,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
         }
       } else {
         // For friends, include current user + selected friends
-        final currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
+        groupId = '';
         splitWith = [currentUserId, ..._selectedFriends];
       }
 
@@ -644,34 +656,45 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 10),
-                  // Toggle between Friends and Group
-                  Row(
+                  // Toggle between Personal, Friends and Group
+                  Column(
                     children: [
-                      Expanded(
-                        child: RadioListTile<String>(
-                          title: const Text('Friends'),
-                          value: 'friends',
-                          groupValue: _splitType,
-                          onChanged: (value) {
-                            setState(() {
-                              _splitType = value!;
-                              _selectedGroupId = null;
-                            });
-                          },
-                        ),
+                      RadioListTile<String>(
+                        title: const Text('Personal'),
+                        subtitle: const Text('Keep as my own expense'),
+                        value: 'personal',
+                        groupValue: _splitType,
+                        onChanged: (value) {
+                          setState(() {
+                            _splitType = value!;
+                            _selectedGroupId = null;
+                            _selectedFriends.clear();
+                          });
+                        },
                       ),
-                      Expanded(
-                        child: RadioListTile<String>(
-                          title: const Text('Group'),
-                          value: 'group',
-                          groupValue: _splitType,
-                          onChanged: (value) {
-                            setState(() {
-                              _splitType = value!;
-                              _selectedFriends.clear();
-                            });
-                          },
-                        ),
+                      RadioListTile<String>(
+                        title: const Text('Friends'),
+                        subtitle: const Text('Split with individual friends'),
+                        value: 'friends',
+                        groupValue: _splitType,
+                        onChanged: (value) {
+                          setState(() {
+                            _splitType = value!;
+                            _selectedGroupId = null;
+                          });
+                        },
+                      ),
+                      RadioListTile<String>(
+                        title: const Text('Group'),
+                        subtitle: const Text('Split within a group'),
+                        value: 'group',
+                        groupValue: _splitType,
+                        onChanged: (value) {
+                          setState(() {
+                            _splitType = value!;
+                            _selectedFriends.clear();
+                          });
+                        },
                       ),
                     ],
                   ),
