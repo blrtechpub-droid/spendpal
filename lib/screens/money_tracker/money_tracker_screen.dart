@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:spendpal/models/money_tracker_model.dart';
+import 'package:spendpal/services/portfolio_service.dart';
 import 'package:spendpal/theme/app_theme.dart';
 
 class MoneyTrackerScreen extends StatefulWidget {
@@ -39,7 +40,20 @@ class _MoneyTrackerScreenState extends State<MoneyTrackerScreen> {
       monthlySalary += salary.amount;
     }
 
-    // Get bank accounts
+    // Get total expenses for current month from expenses collection
+    final expensesSnapshot = await _firestore
+        .collection('expenses')
+        .where('paidBy', isEqualTo: userId)
+        .where('createdAt', isGreaterThanOrEqualTo: startOfMonth)
+        .get();
+
+    double monthlyExpenses = 0.0;
+    for (var doc in expensesSnapshot.docs) {
+      final data = doc.data();
+      monthlyExpenses += (data['amount'] as num?)?.toDouble() ?? 0.0;
+    }
+
+    // Get bank accounts (Savings)
     final bankAccountsSnapshot = await _firestore
         .collection('moneyAccounts')
         .where('userId', isEqualTo: userId)
@@ -52,7 +66,12 @@ class _MoneyTrackerScreenState extends State<MoneyTrackerScreen> {
       totalBankBalance += account.balance;
     }
 
-    // Get credit card accounts
+    // Get investment portfolio value
+    final portfolioService = PortfolioService();
+    final portfolioSummary = await portfolioService.getPortfolioSummary(userId: userId);
+    final totalInvestments = (portfolioSummary['totalCurrent'] as double?) ?? 0.0;
+
+    // Get credit card accounts (Liabilities)
     final creditCardSnapshot = await _firestore
         .collection('moneyAccounts')
         .where('userId', isEqualTo: userId)
@@ -67,23 +86,19 @@ class _MoneyTrackerScreenState extends State<MoneyTrackerScreen> {
       creditCardLimit += (account.creditLimit ?? 0.0);
     }
 
-    // Get total expenses for current month from expenses collection
-    final expensesSnapshot = await _firestore
-        .collection('expenses')
-        .where('paidBy', isEqualTo: userId)
-        .where('createdAt', isGreaterThanOrEqualTo: startOfMonth)
-        .get();
-
-    double monthlyExpenses = 0.0;
-    for (var doc in expensesSnapshot.docs) {
-      final data = doc.data();
-      monthlyExpenses += (data['amount'] as num?)?.toDouble() ?? 0.0;
-    }
+    // Calculate Net Worth = (Savings + Investments) - Liabilities
+    final totalAssets = totalBankBalance + totalInvestments;
+    final totalLiabilities = creditCardBalance; // Can add more liabilities here
+    final netWorth = totalAssets - totalLiabilities;
 
     return {
       'monthlySalary': monthlySalary,
       'monthlyExpenses': monthlyExpenses,
       'remainingBalance': monthlySalary - monthlyExpenses,
+      'savings': totalBankBalance,
+      'investments': totalInvestments,
+      'liabilities': totalLiabilities,
+      'netWorth': netWorth,
       'bankBalance': totalBankBalance,
       'creditCardSpent': creditCardBalance,
       'creditCardLimit': creditCardLimit,
@@ -120,6 +135,10 @@ class _MoneyTrackerScreenState extends State<MoneyTrackerScreen> {
           final monthlySalary = (data['monthlySalary'] as double?) ?? 0.0;
           final monthlyExpenses = (data['monthlyExpenses'] as double?) ?? 0.0;
           final remainingBalance = (data['remainingBalance'] as double?) ?? 0.0;
+          final savings = (data['savings'] as double?) ?? 0.0;
+          final investments = (data['investments'] as double?) ?? 0.0;
+          final liabilities = (data['liabilities'] as double?) ?? 0.0;
+          final netWorth = (data['netWorth'] as double?) ?? 0.0;
           final bankBalance = (data['bankBalance'] as double?) ?? 0.0;
           final creditCardSpent = (data['creditCardSpent'] as double?) ?? 0.0;
           final creditCardLimit = (data['creditCardLimit'] as double?) ?? 0.0;
@@ -132,7 +151,17 @@ class _MoneyTrackerScreenState extends State<MoneyTrackerScreen> {
             child: ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                // Salary Card
+                // Net Worth Card
+                _buildNetWorthCard(
+                  theme,
+                  savings,
+                  investments,
+                  liabilities,
+                  netWorth,
+                ),
+                const SizedBox(height: 16),
+
+                // Monthly Salary Card
                 _buildSalaryCard(
                   theme,
                   monthlySalary,
@@ -160,6 +189,156 @@ class _MoneyTrackerScreenState extends State<MoneyTrackerScreen> {
             ),
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildNetWorthCard(
+    ThemeData theme,
+    double savings,
+    double investments,
+    double liabilities,
+    double netWorth,
+  ) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: netWorth >= 0
+              ? [Colors.blue[400]!, Colors.blue[700]!]
+              : [Colors.red[400]!, Colors.red[700]!],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: (netWorth >= 0 ? Colors.blue : Colors.red)
+                .withValues(alpha: 0.3),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.account_balance_wallet, color: Color(0xFFF8F8F8), size: 28),
+              ),
+              const SizedBox(width: 12),
+              const Text(
+                'Net Worth',
+                style: TextStyle(
+                  color: Color(0xFFF8F8F8),
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          // Net Worth Total
+          Center(
+            child: Column(
+              children: [
+                Text(
+                  'Total Net Worth',
+                  style: TextStyle(
+                    color: const Color(0xFFF8F8F8).withValues(alpha: 0.9),
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '₹${netWorth.toStringAsFixed(2)}',
+                  style: const TextStyle(
+                    color: Color(0xFFF8F8F8),
+                    fontSize: 32,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+          Divider(color: Colors.white.withValues(alpha: 0.3), thickness: 1),
+          const SizedBox(height: 16),
+          // Breakdown
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              Column(
+                children: [
+                  Text(
+                    'Savings',
+                    style: TextStyle(
+                      color: const Color(0xFFF8F8F8).withValues(alpha: 0.8),
+                      fontSize: 12,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '₹${savings.toStringAsFixed(0)}',
+                    style: const TextStyle(
+                      color: Color(0xFFF8F8F8),
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+              Column(
+                children: [
+                  Text(
+                    'Investments',
+                    style: TextStyle(
+                      color: const Color(0xFFF8F8F8).withValues(alpha: 0.8),
+                      fontSize: 12,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '₹${investments.toStringAsFixed(0)}',
+                    style: const TextStyle(
+                      color: Color(0xFFF8F8F8),
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+              Column(
+                children: [
+                  Text(
+                    'Liabilities',
+                    style: TextStyle(
+                      color: const Color(0xFFF8F8F8).withValues(alpha: 0.8),
+                      fontSize: 12,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '₹${liabilities.toStringAsFixed(0)}',
+                    style: const TextStyle(
+                      color: Color(0xFFF8F8F8),
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
