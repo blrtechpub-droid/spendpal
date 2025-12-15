@@ -100,9 +100,17 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
       if (arguments != null && arguments['prefill'] == true) {
         // Pre-fill form with data from SMS expense
         setState(() {
-          _titleController.text = arguments['title'] ?? '';
-          _amountController.text = arguments['amount'] ?? '';
-          _notesController.text = arguments['notes'] ?? '';
+          _titleController.text = arguments['title']?.toString() ?? '';
+
+          // Convert amount to string (might be double from SMS)
+          final amount = arguments['amount'];
+          if (amount != null) {
+            _amountController.text = amount is double
+                ? amount.toString()
+                : amount.toString();
+          }
+
+          _notesController.text = arguments['notes']?.toString() ?? '';
 
           if (arguments['date'] != null) {
             _selectedDate = arguments['date'] as DateTime;
