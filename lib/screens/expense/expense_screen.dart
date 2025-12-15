@@ -43,6 +43,10 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
   Map<String, double> _customSplits = {}; // uid -> amount/percentage/shares
   List<String> _groupMembers = []; // Current group members for display
 
+  // SMS expense tracking
+  String? _smsExpenseId; // Track which SMS expense this came from
+  bool _argumentsProcessed = false; // Flag to prevent duplicate processing
+
   final List<String> categories = [
     'Food',
     'Groceries',
@@ -80,6 +84,40 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
     // If editing an existing expense, load its data
     if (widget.expenseId != null) {
       _loadExpenseData();
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+
+    // Process route arguments only once
+    if (!_argumentsProcessed) {
+      _argumentsProcessed = true;
+
+      final arguments = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+
+      if (arguments != null && arguments['prefill'] == true) {
+        // Pre-fill form with data from SMS expense
+        setState(() {
+          _titleController.text = arguments['title'] ?? '';
+          _amountController.text = arguments['amount'] ?? '';
+          _notesController.text = arguments['notes'] ?? '';
+
+          if (arguments['date'] != null) {
+            _selectedDate = arguments['date'] as DateTime;
+          }
+
+          // Set category if valid
+          final category = arguments['category'] as String?;
+          if (category != null && categories.contains(category)) {
+            _category = category;
+          }
+
+          // Store SMS expense ID for later
+          _smsExpenseId = arguments['smsExpenseId'] as String?;
+        });
+      }
     }
   }
 
@@ -432,6 +470,8 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
         'groupId': groupId,
       };
 
+      String? createdExpenseId;
+
       if (widget.expenseId != null) {
         // Update existing expense
         expenseData['updatedAt'] = FieldValue.serverTimestamp();
@@ -439,14 +479,17 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
             .collection('expenses')
             .doc(widget.expenseId)
             .update(expenseData);
+        createdExpenseId = widget.expenseId;
       } else {
         // Create new expense
         expenseData['createdAt'] = FieldValue.serverTimestamp();
-        await FirebaseFirestore.instance.collection('expenses').add(expenseData);
+        final docRef = await FirebaseFirestore.instance.collection('expenses').add(expenseData);
+        createdExpenseId = docRef.id;
       }
 
       if (!mounted) return;
-      Navigator.pop(context);
+      // Return the expense ID so SMS expense can be marked as categorized
+      Navigator.pop(context, createdExpenseId);
     } catch (e) {
       print('Error saving expense: $e');
       if (!mounted) return;
