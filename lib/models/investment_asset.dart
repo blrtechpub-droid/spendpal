@@ -10,6 +10,7 @@ class InvestmentAsset {
   final String? symbol; // For stocks/ETFs: ticker symbol (e.g., "RELIANCE", "NIFTYBEES")
   final String? schemeCode; // For mutual funds: AMFI scheme code
   final String? platform; // Investment platform (e.g., "zerodha", "groww", "5paisa", "etrade")
+  final String? trackerId; // Link to AccountTracker for auto-import from emails/SMS
   final String currency; // Default: 'INR'
   final List<String> tags; // User-defined tags for categorization
   final String? goalId; // Link to financial goal (future feature)
@@ -24,6 +25,7 @@ class InvestmentAsset {
     this.symbol,
     this.schemeCode,
     this.platform,
+    this.trackerId,
     this.currency = 'INR',
     this.tags = const [],
     this.goalId,
@@ -41,6 +43,7 @@ class InvestmentAsset {
       'symbol': symbol,
       'schemeCode': schemeCode,
       'platform': platform,
+      'trackerId': trackerId,
       'currency': currency,
       'tags': tags,
       'goalId': goalId,
@@ -60,6 +63,7 @@ class InvestmentAsset {
       symbol: data['symbol'],
       schemeCode: data['schemeCode'],
       platform: data['platform'],
+      trackerId: data['trackerId'],
       currency: data['currency'] ?? 'INR',
       tags: List<String>.from(data['tags'] ?? []),
       goalId: data['goalId'],
@@ -77,6 +81,7 @@ class InvestmentAsset {
     String? symbol,
     String? schemeCode,
     String? platform,
+    String? trackerId,
     String? currency,
     List<String>? tags,
     String? goalId,
@@ -91,6 +96,7 @@ class InvestmentAsset {
       symbol: symbol ?? this.symbol,
       schemeCode: schemeCode ?? this.schemeCode,
       platform: platform ?? this.platform,
+      trackerId: trackerId ?? this.trackerId,
       currency: currency ?? this.currency,
       tags: tags ?? this.tags,
       goalId: goalId ?? this.goalId,

@@ -30,6 +30,8 @@ class _UpdatePriceScreenState extends State<UpdatePriceScreen> {
   List<InvestmentAsset> _assets = [];
   bool _isLoading = false;
   double? _currentPrice;
+  bool _bulkUpdateMode = false;
+  Map<String, TextEditingController> _bulkPriceControllers = {};
 
   @override
   void initState() {
@@ -42,6 +44,9 @@ class _UpdatePriceScreenState extends State<UpdatePriceScreen> {
   @override
   void dispose() {
     _priceController.dispose();
+    for (var controller in _bulkPriceControllers.values) {
+      controller.dispose();
+    }
     super.dispose();
   }
 
@@ -55,7 +60,29 @@ class _UpdatePriceScreenState extends State<UpdatePriceScreen> {
         _selectedAsset = widget.asset;
         _loadCurrentPrice();
       }
+      // Initialize controllers for bulk update mode
+      _initializeBulkControllers();
     });
+  }
+
+  void _initializeBulkControllers() async {
+    if (_userId == null) return;
+
+    _bulkPriceControllers.clear();
+    for (var asset in _assets) {
+      final controller = TextEditingController();
+      _bulkPriceControllers[asset.assetId] = controller;
+
+      // Load current price for each asset
+      final holding = await _portfolioService.getHoldingForAsset(
+        userId: _userId!,
+        assetId: asset.assetId,
+      );
+      if (holding != null && holding.currentPrice != null) {
+        controller.text = holding.currentPrice!.toStringAsFixed(2);
+      }
+    }
+    setState(() {});
   }
 
   Future<void> _loadCurrentPrice() async {
@@ -130,21 +157,112 @@ class _UpdatePriceScreenState extends State<UpdatePriceScreen> {
     }
   }
 
+  Future<void> _updateBulkPrices() async {
+    if (!_formKey.currentState!.validate() || _userId == null) {
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      int successCount = 0;
+      int errorCount = 0;
+
+      for (var asset in _assets) {
+        final controller = _bulkPriceControllers[asset.assetId];
+        if (controller == null || controller.text.isEmpty) continue;
+
+        final newPrice = double.tryParse(controller.text);
+        if (newPrice == null || newPrice <= 0) continue;
+
+        final success = await _transactionService.updateCurrentPrice(
+          userId: _userId!,
+          assetId: asset.assetId,
+          currentPrice: newPrice,
+        );
+
+        if (success) {
+          successCount++;
+        } else {
+          errorCount++;
+        }
+      }
+
+      if (mounted) {
+        if (successCount > 0) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Updated $successCount prices successfully${errorCount > 0 ? ', $errorCount failed' : ''}'),
+              backgroundColor: errorCount > 0 ? Colors.orange : Colors.green,
+            ),
+          );
+          Navigator.pop(context, true);
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('No prices were updated'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Update Price'),
+        title: Text(_bulkUpdateMode ? 'Bulk Update Prices' : 'Update Price'),
+        actions: widget.asset == null && _assets.length > 1
+            ? [
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: Row(
+                    children: [
+                      const Text('Bulk', style: TextStyle(fontSize: 14)),
+                      Switch(
+                        value: _bulkUpdateMode,
+                        onChanged: (value) {
+                          setState(() {
+                            _bulkUpdateMode = value;
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ]
+            : null,
       ),
       body: Form(
         key: _formKey,
         child: ListView(
           padding: const EdgeInsets.all(16),
-          children: [
-            // Asset Selection
-            if (widget.asset == null)
+          children: _bulkUpdateMode
+              ? _buildBulkUpdateUI(theme)
+              : [
+                  // Asset Selection
+                  if (widget.asset == null)
               DropdownButtonFormField<InvestmentAsset>(
                 value: _selectedAsset,
                 decoration: const InputDecoration(
@@ -309,6 +427,103 @@ class _UpdatePriceScreenState extends State<UpdatePriceScreen> {
         ),
       ),
     );
+  }
+
+  List<Widget> _buildBulkUpdateUI(ThemeData theme) {
+    return [
+      // Info Card
+      Card(
+        color: Colors.blue.withValues(alpha: 0.1),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Icon(Icons.info_outline, color: Colors.blue[700], size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Update prices for multiple assets at once. Leave blank to skip an asset.',
+                  style: theme.textTheme.bodySmall,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      const SizedBox(height: 16),
+
+      // Asset price input fields
+      ..._assets.map((asset) {
+        final controller = _bulkPriceControllers[asset.assetId];
+        if (controller == null) return const SizedBox();
+
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                asset.name,
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              Text(
+                _getAssetTypeDisplay(asset.assetType),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: Colors.grey[600],
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextFormField(
+                controller: controller,
+                decoration: InputDecoration(
+                  labelText: 'New Price',
+                  border: const OutlineInputBorder(),
+                  prefixIcon: const Icon(Icons.currency_rupee),
+                  hintText: 'Leave blank to skip',
+                  suffixIcon: controller.text.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear, size: 20),
+                          onPressed: () {
+                            controller.clear();
+                            setState(() {});
+                          },
+                        )
+                      : null,
+                ),
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
+                ],
+                onChanged: (value) => setState(() {}),
+              ),
+            ],
+          ),
+        );
+      }),
+
+      const SizedBox(height: 8),
+
+      // Update All Button
+      ElevatedButton.icon(
+        onPressed: _isLoading ? null : _updateBulkPrices,
+        style: ElevatedButton.styleFrom(
+          padding: const EdgeInsets.all(16),
+        ),
+        icon: _isLoading
+            ? const SizedBox(
+                height: 20,
+                width: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : const Icon(Icons.update),
+        label: Text(
+          _isLoading ? 'Updating...' : 'Update All Prices',
+          style: const TextStyle(fontSize: 16),
+        ),
+      ),
+    ];
   }
 
   String _getAssetTypeDisplay(String assetType) {
