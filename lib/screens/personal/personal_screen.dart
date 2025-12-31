@@ -8,6 +8,7 @@ import 'package:spendpal/screens/expense/expense_detail_screen.dart';
 import 'package:spendpal/screens/expense/expense_screen.dart';
 import 'package:spendpal/screens/money_tracker/money_tracker_screen.dart';
 import 'package:spendpal/screens/personal/auto_import_tab.dart';
+import 'package:spendpal/widgets/savings_goals_widget.dart';
 
 class PersonalExpensesScreen extends StatefulWidget {
   const PersonalExpensesScreen({super.key});
@@ -20,6 +21,7 @@ class _PersonalExpensesScreenState extends State<PersonalExpensesScreen> with Si
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   late TabController _tabController;
+  bool _showTopCategories = true; // State for showing/hiding top categories
 
   @override
   void initState() {
@@ -193,9 +195,9 @@ class _PersonalExpensesScreenState extends State<PersonalExpensesScreen> with Si
           labelColor: theme.textTheme.bodyLarge?.color,
           unselectedLabelColor: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.6),
           tabs: const [
-            Tab(text: 'All'),
-            Tab(text: 'Auto-Import'),
-            Tab(text: 'Tracker'),
+            Tab(text: 'Expenses'),
+            Tab(text: 'Transactions'),
+            Tab(text: 'Accounts'),
           ],
         ),
         actions: [
@@ -424,69 +426,112 @@ class _PersonalExpensesScreenState extends State<PersonalExpensesScreen> with Si
             builder: (context, monthlySnapshot) {
               final monthlyTotal = monthlySnapshot.data ?? 0.0;
 
-              return Column(
-                children: [
-                  // Statistics Summary
-                  Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          AppTheme.tealAccent.withValues(alpha: 0.2),
-                          AppTheme.tealAccent.withValues(alpha: 0.1),
-                        ],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      border: Border(
-                        bottom: BorderSide(
-                          color: theme.dividerTheme.color ?? Colors.grey.withValues(alpha: 0.2),
-                          width: 1,
+              return CustomScrollView(
+                slivers: [
+                  // Collapsible Header with Statistics Summary
+                  SliverAppBar(
+                    expandedHeight: _showTopCategories ? 350 : 200,
+                    floating: true,
+                    pinned: true,
+                    automaticallyImplyLeading: false,
+                    backgroundColor: theme.scaffoldBackgroundColor,
+                    actions: categoryBreakdown.isNotEmpty ? [
+                      IconButton(
+                        icon: Icon(
+                          _showTopCategories ? Icons.expand_less : Icons.expand_more,
+                          color: theme.iconTheme.color,
                         ),
+                        tooltip: _showTopCategories ? 'Hide Categories' : 'Show Categories',
+                        onPressed: () {
+                          setState(() {
+                            _showTopCategories = !_showTopCategories;
+                          });
+                        },
                       ),
-                    ),
-                    child: Column(
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceAround,
-                          children: [
-                            _buildStatCard(
-                              'This Month',
-                              '₹${monthlyTotal.toStringAsFixed(2)}',
-                              Icons.calendar_month,
-                              AppTheme.tealAccent,
+                    ] : null,
+                    flexibleSpace: FlexibleSpaceBar(
+                      background: Container(
+                        padding: const EdgeInsets.fromLTRB(20, 70, 20, 10),
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              AppTheme.tealAccent.withValues(alpha: 0.2),
+                              AppTheme.tealAccent.withValues(alpha: 0.1),
+                            ],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                        ),
+                        child: SingleChildScrollView(
+                          physics: const NeverScrollableScrollPhysics(),
+                          child: Column(
+                            children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceAround,
+                              children: [
+                                _buildStatCard(
+                                  'This Month',
+                                  '₹${monthlyTotal.toStringAsFixed(2)}',
+                                  Icons.calendar_month,
+                                  AppTheme.tealAccent,
+                                ),
+                                _buildStatCard(
+                                  'Total Expenses',
+                                  personalExpenses.length.toString(),
+                                  Icons.receipt,
+                                  AppTheme.orangeAccent,
+                                ),
+                              ],
                             ),
-                            _buildStatCard(
-                              'Total Expenses',
-                              personalExpenses.length.toString(),
-                              Icons.receipt,
-                              AppTheme.orangeAccent,
-                            ),
+                            if (categoryBreakdown.isNotEmpty) ...[
+                              const SizedBox(height: 16),
+                              Divider(color: theme.dividerTheme.color),
+                              const SizedBox(height: 8),
+                              InkWell(
+                                onTap: () {
+                                  setState(() {
+                                    _showTopCategories = !_showTopCategories;
+                                  });
+                                },
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      'Top Categories',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w600,
+                                        color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
+                                      ),
+                                    ),
+                                    Icon(
+                                      _showTopCategories ? Icons.expand_less : Icons.expand_more,
+                                      color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
+                                      size: 20,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              if (_showTopCategories) ...[
+                                const SizedBox(height: 12),
+                                _buildCategoryChips(categoryBreakdown),
+                              ],
+                            ],
                           ],
                         ),
-                        if (categoryBreakdown.isNotEmpty) ...[
-                          const SizedBox(height: 16),
-                          Divider(color: theme.dividerTheme.color),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Top Categories',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          _buildCategoryChips(categoryBreakdown),
-                        ],
-                      ],
+                      ),
                     ),
+                    collapseMode: CollapseMode.parallax,
+                  ),
+                ),
+
+                // Savings Goals Widget
+                  const SliverToBoxAdapter(
+                    child: SavingsGoalsWidget(),
                   ),
 
                   // Expenses List
-                  Expanded(
-                    child: _buildExpensesList(personalExpenses),
-                  ),
+                  _buildExpensesSliverList(personalExpenses),
                 ],
               );
             },
@@ -547,33 +592,88 @@ class _PersonalExpensesScreenState extends State<PersonalExpensesScreen> with Si
   }
 
   Widget _buildCategoryChips(Map<String, double> categoryBreakdown) {
+    final theme = Theme.of(context);
+
     // Sort categories by amount (descending) and take top 3
     var sortedCategories = categoryBreakdown.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
 
     var topCategories = sortedCategories.take(3).toList();
 
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      alignment: WrapAlignment.center,
+    // Find max value for scaling
+    final maxValue = topCategories.first.value;
+
+    return Column(
       children: topCategories.map((entry) {
+        final percentage = (entry.value / maxValue);
         final color = _getCategoryBackgroundColor(entry.key);
-        return Chip(
-          avatar: Icon(
-            _getCategoryIcon(entry.key),
-            size: 16,
-            color: Colors.grey[800],
+
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Row(
+            children: [
+              // Category icon and name
+              Icon(
+                _getCategoryIcon(entry.key),
+                size: 16,
+                color: color.withValues(alpha: 0.8),
+              ),
+              const SizedBox(width: 8),
+              SizedBox(
+                width: 80,
+                child: Text(
+                  entry.key,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
+                    fontWeight: FontWeight.w500,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              // Horizontal bar
+              Expanded(
+                child: Stack(
+                  children: [
+                    // Background bar
+                    Container(
+                      height: 20,
+                      decoration: BoxDecoration(
+                        color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    // Filled bar
+                    FractionallySizedBox(
+                      widthFactor: percentage,
+                      child: Container(
+                        height: 20,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              color.withValues(alpha: 0.8),
+                              color.withValues(alpha: 0.6),
+                            ],
+                          ),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              // Amount
+              Text(
+                '₹${entry.value.toStringAsFixed(0)}',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: color.withValues(alpha: 0.8),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
           ),
-          label: Text(
-            '${entry.key}: ₹${entry.value.toStringAsFixed(0)}',
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.grey[800],
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          backgroundColor: color,
         );
       }).toList(),
     );
@@ -845,6 +945,256 @@ class _PersonalExpensesScreenState extends State<PersonalExpensesScreen> with Si
           ],
         );
       }).toList(),
+    );
+  }
+
+  // Build expenses list as sliver for CustomScrollView
+  Widget _buildExpensesSliverList(List<QueryDocumentSnapshot> expenses) {
+    final theme = Theme.of(context);
+
+    // Group expenses by month
+    Map<String, List<QueryDocumentSnapshot>> groupedExpenses = {};
+    for (var expense in expenses) {
+      final data = expense.data() as Map<String, dynamic>;
+      final timestamp = data['createdAt'] as Timestamp?;
+      if (timestamp != null) {
+        final date = timestamp.toDate();
+        final monthKey = DateFormat('MMMM yyyy').format(date);
+        groupedExpenses.putIfAbsent(monthKey, () => []);
+        groupedExpenses[monthKey]!.add(expense);
+      }
+    }
+
+    // Build list of widgets
+    List<Widget> sliverChildren = [];
+
+    for (var entry in groupedExpenses.entries) {
+      // Month Header
+      sliverChildren.add(
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: theme.cardTheme.color?.withValues(alpha: 0.5) ?? theme.scaffoldBackgroundColor,
+            border: Border(
+              bottom: BorderSide(
+                color: theme.dividerTheme.color ?? Colors.grey.withValues(alpha: 0.2),
+                width: 1,
+              ),
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                entry.key,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
+                  letterSpacing: 0.5,
+                ),
+              ),
+              Text(
+                '₹${entry.value.fold<double>(0.0, (total, doc) {
+                  final amount = ((doc.data() as Map<String, dynamic>)['amount'] as num?)?.toDouble() ?? 0.0;
+                  return total + amount;
+                }).toStringAsFixed(2)}',
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.tealAccent,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+
+      // Expenses for this month
+      for (var expenseDoc in entry.value) {
+        final data = expenseDoc.data() as Map<String, dynamic>;
+        final title = data['title'] ?? 'Untitled';
+        final amount = (data['amount'] as num?)?.toDouble() ?? 0.0;
+        final category = data['category'] ?? 'Other';
+        final timestamp = data['createdAt'] as Timestamp?;
+        final date = timestamp?.toDate();
+        final notes = data['notes'] ?? '';
+        final tags = List<String>.from(data['tags'] ?? []);
+
+        // Get expense type info
+        final expenseType = _getExpenseType(data);
+        final typeColor = _getExpenseTypeColor(expenseType);
+        final typeLabel = _getExpenseTypeLabel(expenseType);
+        final typeIcon = _getExpenseTypeIcon(expenseType);
+
+        sliverChildren.add(
+          Slidable(
+            key: ValueKey(expenseDoc.id),
+            startActionPane: ActionPane(
+              motion: const DrawerMotion(),
+              children: [
+                SlidableAction(
+                  onPressed: (context) => _splitWithFriends(context, expenseDoc.id, data),
+                  backgroundColor: Colors.purple,
+                  foregroundColor: Colors.white,
+                  icon: Icons.people,
+                  label: 'Friends',
+                ),
+              ],
+            ),
+            endActionPane: ActionPane(
+              motion: const DrawerMotion(),
+              children: [
+                SlidableAction(
+                  onPressed: (context) => _splitWithGroup(context, expenseDoc.id, data),
+                  backgroundColor: Colors.blue,
+                  foregroundColor: Colors.white,
+                  icon: Icons.groups,
+                  label: 'Group',
+                ),
+              ],
+            ),
+            child: InkWell(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => ExpenseDetailScreen(expenseId: expenseDoc.id),
+                  ),
+                );
+              },
+              child: Container(
+                margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: theme.cardTheme.color,
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.05),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    // Category Icon
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: _getCategoryBackgroundColor(category),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(
+                        _getCategoryIcon(category),
+                        color: Colors.grey[800],
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    // Expense Details
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  title,
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w600,
+                                    color: theme.textTheme.bodyLarge?.color,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              if (tags.isNotEmpty)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: typeColor.withValues(alpha: 0.2),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(typeIcon, size: 10, color: typeColor),
+                                      const SizedBox(width: 3),
+                                      Text(
+                                        typeLabel,
+                                        style: TextStyle(
+                                          fontSize: 9,
+                                          color: typeColor,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              Text(
+                                category,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.6),
+                                ),
+                              ),
+                              if (date != null) ...[
+                                Text(
+                                  ' • ${DateFormat('MMM d').format(date)}',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.5),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                          if (notes.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 4),
+                              child: Text(
+                                notes,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.5),
+                                  fontStyle: FontStyle.italic,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    // Amount
+                    Text(
+                      '₹${amount.toStringAsFixed(2)}',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.orangeAccent,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      }
+    }
+
+    return SliverList(
+      delegate: SliverChildListDelegate(sliverChildren),
     );
   }
 

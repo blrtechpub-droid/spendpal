@@ -1,18 +1,16 @@
 import 'package:flutter/material.dart';
-import 'package:spendpal/widgets/FloatingButtons.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:spendpal/screens/groups/add_group_screen.dart';
 import 'package:spendpal/screens/groups/group_home_screen.dart';
 import 'package:spendpal/models/group_model.dart';
-import 'package:spendpal/theme/app_theme.dart';
 import 'package:spendpal/services/balance_service.dart';
 import 'package:spendpal/screens/requests/pending_requests_screen.dart';
 import 'package:spendpal/widgets/empty_state_widget.dart';
 import 'package:spendpal/services/group_invitation_service.dart';
 
 class GroupsScreen extends StatefulWidget {
-  const GroupsScreen({Key? key}) : super(key: key);
+  const GroupsScreen({super.key});
 
   @override
   State<GroupsScreen> createState() => _GroupsScreenState();
@@ -170,8 +168,8 @@ class _GroupsScreenState extends State<GroupsScreen> {
                   // Overall Balance Summary - only show if non-zero
                   if (overallBalance.abs() >= 0.01)
                     Container(
-                      margin: const EdgeInsets.all(16),
-                      padding: const EdgeInsets.all(20),
+                      margin: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+                      padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
                           colors: overallBalance < 0
@@ -180,12 +178,12 @@ class _GroupsScreenState extends State<GroupsScreen> {
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                         ),
-                        borderRadius: BorderRadius.circular(16),
+                        borderRadius: BorderRadius.circular(12),
                         boxShadow: [
                           BoxShadow(
                             color: (overallBalance < 0 ? Colors.orange : Colors.teal).withValues(alpha: 0.3),
-                            blurRadius: 12,
-                            offset: const Offset(0, 6),
+                            blurRadius: 8,
+                            offset: const Offset(0, 4),
                           ),
                         ],
                       ),
@@ -241,10 +239,10 @@ class _GroupsScreenState extends State<GroupsScreen> {
                       }
 
                       return Container(
-                        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                         decoration: BoxDecoration(
                           color: theme.cardTheme.color,
-                          borderRadius: BorderRadius.circular(16),
+                          borderRadius: BorderRadius.circular(12),
                           boxShadow: [
                             BoxShadow(
                               color: Colors.black.withValues(alpha: 0.08),
@@ -256,10 +254,10 @@ class _GroupsScreenState extends State<GroupsScreen> {
                         child: Column(
                           children: [
                             ListTile(
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                               leading: Container(
-                                width: 56,
-                                height: 56,
+                                width: 48,
+                                height: 48,
                                 decoration: BoxDecoration(
                                   gradient: LinearGradient(
                                     colors: [
@@ -288,19 +286,19 @@ class _GroupsScreenState extends State<GroupsScreen> {
                                 'Non-group expenses',
                                 style: TextStyle(
                                   color: theme.textTheme.bodyLarge?.color,
-                                  fontSize: 17,
+                                  fontSize: 16,
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
                               subtitle: Padding(
-                                padding: const EdgeInsets.only(top: 4),
+                                padding: const EdgeInsets.only(top: 2),
                                 child: Text(
                                   totalNonGroup < 0
                                       ? 'you owe ₹${(-totalNonGroup).toStringAsFixed(2)}'
                                       : 'you are owed ₹${totalNonGroup.toStringAsFixed(2)}',
                                   style: TextStyle(
                                     color: totalNonGroup < 0 ? Colors.orange : theme.colorScheme.primary,
-                                    fontSize: 14,
+                                    fontSize: 13,
                                     fontWeight: FontWeight.w500,
                                   ),
                                 ),
@@ -442,10 +440,10 @@ class _GroupsScreenState extends State<GroupsScreen> {
         }
 
         return Container(
-          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           decoration: BoxDecoration(
             color: theme.cardTheme.color,
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(12),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withValues(alpha: 0.08),
@@ -457,10 +455,10 @@ class _GroupsScreenState extends State<GroupsScreen> {
           child: Column(
             children: [
               ListTile(
-                contentPadding: const EdgeInsets.all(16),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 leading: Container(
-                  width: 56,
-                  height: 56,
+                  width: 48,
+                  height: 48,
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       colors: [
@@ -499,7 +497,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
                   groupName,
                   style: TextStyle(
                     color: theme.textTheme.bodyLarge?.color,
-                    fontSize: 17,
+                    fontSize: 16,
                     fontWeight: FontWeight.w600,
                   ),
                   overflow: TextOverflow.ellipsis,
@@ -507,25 +505,25 @@ class _GroupsScreenState extends State<GroupsScreen> {
                 ),
                 subtitle: netBalance.abs() >= 0.01
                     ? Padding(
-                        padding: const EdgeInsets.only(top: 4),
+                        padding: const EdgeInsets.only(top: 2),
                         child: Text(
                           netBalance < 0
                               ? 'you owe ₹${(-netBalance).toStringAsFixed(2)}'
                               : 'you are owed ₹${netBalance.toStringAsFixed(2)}',
                           style: TextStyle(
                             color: netBalance < 0 ? Colors.orange : theme.colorScheme.primary,
-                            fontSize: 14,
+                            fontSize: 13,
                             fontWeight: FontWeight.w500,
                           ),
                         ),
                       )
                     : Padding(
-                        padding: const EdgeInsets.only(top: 4),
+                        padding: const EdgeInsets.only(top: 2),
                         child: Text(
                           'settled up',
                           style: TextStyle(
                             color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
-                            fontSize: 14,
+                            fontSize: 13,
                           ),
                         ),
                       ),
@@ -550,8 +548,8 @@ class _GroupsScreenState extends State<GroupsScreen> {
 
                     return Container(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 8,
+                        horizontal: 12,
+                        vertical: 6,
                       ),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -563,7 +561,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
                                   : '$name owes you',
                               style: TextStyle(
                                 color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
-                                fontSize: 14,
+                                fontSize: 13,
                               ),
                               overflow: TextOverflow.ellipsis,
                               maxLines: 1,
@@ -573,7 +571,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
                             '₹${balance.abs().toStringAsFixed(2)}',
                             style: TextStyle(
                               color: balance < 0 ? Colors.orange : theme.colorScheme.primary,
-                              fontSize: 14,
+                              fontSize: 13,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -583,7 +581,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
                   },
                 );
               }),
-              const SizedBox(height: 8),
+              const SizedBox(height: 4),
             ],
           ),
         );
