@@ -8,6 +8,14 @@ import 'package:spendpal/screens/expense/expense_detail_screen.dart';
 import 'package:intl/intl.dart';
 import 'package:spendpal/theme/app_theme.dart';
 import 'package:spendpal/widgets/FloatingButtons.dart';
+import '../../services/debt_simplification_service.dart';
+import '../../services/group_export_service.dart';
+import '../../models/simplified_debt_model.dart';
+import '../../widgets/upi_settle_dialog.dart';
+import 'group_balances_screen.dart';
+import 'group_charts_screen.dart';
+import 'group_whiteboard_screen.dart';
+import '../expense/expense_screen.dart';
 
 class GroupHomeScreen extends StatelessWidget {
   final GroupModel group;
@@ -100,6 +108,33 @@ class GroupHomeScreen extends StatelessWidget {
           maxLines: 1,
         ),
         actions: [
+          PopupMenuButton<String>(
+            icon: Icon(Icons.download, color: theme.textTheme.bodyLarge?.color),
+            tooltip: 'Export',
+            onSelected: (value) => _handleExport(context, value),
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'csv',
+                child: Row(
+                  children: [
+                    Icon(Icons.table_chart),
+                    SizedBox(width: 8),
+                    Text('Export as CSV'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'pdf',
+                child: Row(
+                  children: [
+                    Icon(Icons.picture_as_pdf),
+                    SizedBox(width: 8),
+                    Text('Export as PDF'),
+                  ],
+                ),
+              ),
+            ],
+          ),
           IconButton(
             icon: Icon(Icons.settings, color: theme.textTheme.bodyLarge?.color),
             onPressed: () {
@@ -195,7 +230,7 @@ class GroupHomeScreen extends StatelessWidget {
                   final isSettledUp = currentUserBalance.abs() < 0.01;
 
                   return Container(
-                    padding: const EdgeInsets.all(20),
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         colors: isSettledUp
@@ -224,32 +259,10 @@ class GroupHomeScreen extends StatelessWidget {
                     ),
                     child: Column(
                       children: [
-                        // Group icon
-                        Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: [
-                                AppTheme.tealAccent,
-                                AppTheme.tealAccent.withValues(alpha: 0.7),
-                              ],
-                            ),
-                            borderRadius: BorderRadius.circular(16),
-                            boxShadow: [
-                              BoxShadow(
-                                color: AppTheme.tealAccent.withValues(alpha: 0.3),
-                                blurRadius: 12,
-                                offset: const Offset(0, 6),
-                              ),
-                            ],
-                          ),
-                          child: const Icon(Icons.groups, color: Color(0xFFF8F8F8), size: 40),
-                        ),
-                        const SizedBox(height: 16),
                         Text(
                           group.name,
                           style: TextStyle(
-                            fontSize: 22,
+                            fontSize: 20,
                             fontWeight: FontWeight.bold,
                             color: theme.textTheme.bodyLarge?.color,
                           ),
@@ -288,47 +301,72 @@ class GroupHomeScreen extends StatelessWidget {
                   );
                 },
               ),
-              // Action Buttons (Settle up, Charts, Balances)
+              // Action Buttons (Horizontal Scrollable - Splitwise Style)
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                child: Row(
+                height: 110,
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
                   children: [
-                    Expanded(
-                      child: ElevatedButton(
-                        style: AppTheme.warningButtonStyle,
-                        onPressed: () {
-                          // TODO: Implement settle up
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Settle up feature coming soon!')),
-                          );
-                        },
-                        child: const Text('Settle up'),
-                      ),
+                    _buildActionButton(
+                      context: context,
+                      icon: Icons.paid,
+                      label: 'Settle up',
+                      color: AppTheme.warningColor,
+                      onTap: () => _showSettleUpDialog(context, group.groupId, group.name),
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        icon: const Icon(Icons.bar_chart),
-                        label: const Text('Charts'),
-                        onPressed: () {
-                          // TODO: Implement charts
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Charts feature coming soon!')),
-                          );
-                        },
-                      ),
+                    _buildActionButton(
+                      context: context,
+                      icon: Icons.bar_chart,
+                      label: 'Charts',
+                      color: AppTheme.tealAccent,
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => GroupChartsScreen(
+                              groupId: group.groupId,
+                              groupName: group.name,
+                            ),
+                          ),
+                        );
+                      },
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () {
-                          // TODO: Implement balances view
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Balances feature coming soon!')),
-                          );
-                        },
-                        child: const Text('Balances'),
-                      ),
+                    _buildActionButton(
+                      context: context,
+                      icon: Icons.account_balance_wallet,
+                      label: 'Balances',
+                      color: AppTheme.tealAccent,
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => GroupBalancesScreen(
+                              groupId: group.groupId,
+                              groupName: group.name,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                    _buildActionButton(
+                      context: context,
+                      icon: Icons.notes,
+                      label: 'Whiteboard',
+                      color: AppTheme.tealAccent,
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => GroupWhiteboardScreen(
+                              groupId: group.groupId,
+                              groupName: group.name,
+                              initialNotes: groupData?['notes'],
+                            ),
+                          ),
+                        );
+                      },
                     ),
                   ],
                 ),
@@ -366,45 +404,74 @@ class GroupHomeScreen extends StatelessWidget {
 
                     var expenses = expenseSnapshot.data!.docs;
 
-                    // Sort manually by createdAt
-                    expenses.sort((a, b) {
-                      final aData = a.data() as Map<String, dynamic>;
-                      final bData = b.data() as Map<String, dynamic>;
-                      final aTime = aData['createdAt'] as Timestamp?;
-                      final bTime = bData['createdAt'] as Timestamp?;
-                      if (aTime == null || bTime == null) return 0;
-                      return bTime.compareTo(aTime); // Descending
-                    });
+                    // Fetch settlements for this group
+                    return FutureBuilder<QuerySnapshot>(
+                      future: FirebaseFirestore.instance
+                          .collection('settlements')
+                          .where('groupId', isEqualTo: group.groupId)
+                          .get(),
+                      builder: (context, settlementSnapshot) {
+                        // Combine expenses and settlements
+                        List<Map<String, dynamic>> allItems = [];
 
-                    if (expenses.isEmpty) {
-                      return const Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.receipt_long, size: 64, color: Colors.grey),
-                            SizedBox(height: 16),
-                            Text("No expenses added yet", style: TextStyle(fontSize: 18)),
-                          ],
-                        ),
-                      );
-                    }
+                        // Add expenses
+                        for (var expense in expenses) {
+                          final data = expense.data() as Map<String, dynamic>;
+                          data['_id'] = expense.id;
+                          data['_type'] = 'expense';
+                          data['_doc'] = expense;
+                          allItems.add(data);
+                        }
 
-                    // Group expenses by month
-                    Map<String, List<QueryDocumentSnapshot>> groupedExpenses = {};
-                    for (var expense in expenses) {
-                      final data = expense.data() as Map<String, dynamic>;
-                      final timestamp = data['createdAt'] as Timestamp?;
-                      if (timestamp != null) {
-                        final date = timestamp.toDate();
-                        final monthKey = DateFormat('MMMM yyyy').format(date);
-                        groupedExpenses.putIfAbsent(monthKey, () => []);
-                        groupedExpenses[monthKey]!.add(expense);
-                      }
-                    }
+                        // Add settlements if loaded
+                        if (settlementSnapshot.hasData) {
+                          for (var settlement in settlementSnapshot.data!.docs) {
+                            final data = settlement.data() as Map<String, dynamic>;
+                            data['_id'] = settlement.id;
+                            data['_type'] = 'settlement';
+                            data['_doc'] = settlement;
+                            // Use settledAt as createdAt for sorting
+                            data['createdAt'] = data['settledAt'];
+                            allItems.add(data);
+                          }
+                        }
 
-                    return ListView(
-                      children: groupedExpenses.entries.map((entry) {
-                        return Column(
+                        // Sort by createdAt/settledAt
+                        allItems.sort((a, b) {
+                          final aTime = a['createdAt'] as Timestamp?;
+                          final bTime = b['createdAt'] as Timestamp?;
+                          if (aTime == null || bTime == null) return 0;
+                          return bTime.compareTo(aTime); // Descending
+                        });
+
+                        if (allItems.isEmpty) {
+                          return const Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.receipt_long, size: 64, color: Colors.grey),
+                                SizedBox(height: 16),
+                                Text("No expenses added yet", style: TextStyle(fontSize: 18)),
+                              ],
+                            ),
+                          );
+                        }
+
+                        // Group items by month
+                        Map<String, List<Map<String, dynamic>>> groupedItems = {};
+                        for (var item in allItems) {
+                          final timestamp = item['createdAt'] as Timestamp?;
+                          if (timestamp != null) {
+                            final date = timestamp.toDate();
+                            final monthKey = DateFormat('MMMM yyyy').format(date);
+                            groupedItems.putIfAbsent(monthKey, () => []);
+                            groupedItems[monthKey]!.add(item);
+                          }
+                        }
+
+                        return ListView(
+                          children: groupedItems.entries.map((entry) {
+                            return Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             // Month Header
@@ -429,15 +496,23 @@ class GroupHomeScreen extends StatelessWidget {
                                 ),
                               ),
                             ),
-                            // Expenses for this month
-                            ...entry.value.map((expenseDoc) {
-                              final data = expenseDoc.data() as Map<String, dynamic>;
-                              final title = data['title'] ?? '';
-                              final amount = (data['amount'] as num?)?.toDouble() ?? 0.0;
-                              final paidByUid = data['paidBy'] ?? '';
-                              final category = data['category'] ?? 'Other';
-                              final splitDetails = Map<String, dynamic>.from(data['splitDetails'] ?? {});
-                              final timestamp = data['createdAt'] as Timestamp?;
+                            // Expenses and Settlements for this month
+                            ...entry.value.map((item) {
+                              final itemType = item['_type'] as String;
+                              final itemId = item['_id'] as String;
+
+                              // Handle settlement items
+                              if (itemType == 'settlement') {
+                                return _buildSettlementItem(item, currentUserId, theme);
+                              }
+
+                              // Handle expense items
+                              final title = item['title'] ?? '';
+                              final amount = (item['amount'] as num?)?.toDouble() ?? 0.0;
+                              final paidByUid = item['paidBy'] ?? '';
+                              final category = item['category'] ?? 'Other';
+                              final splitDetails = Map<String, dynamic>.from(item['splitDetails'] ?? {});
+                              final timestamp = item['createdAt'] as Timestamp?;
                               final userShare = splitDetails[currentUserId] as num? ?? 0.0;
                               final date = timestamp?.toDate();
 
@@ -455,86 +530,126 @@ class GroupHomeScreen extends StatelessWidget {
 
                                   final isPaidByCurrentUser = paidByUid == currentUserId;
                                   final statusText = isPaidByCurrentUser
-                                      ? 'you borrowed'
-                                      : 'you lent';
+                                      ? 'you lent'
+                                      : 'you borrowed';
                                   final statusColor = isPaidByCurrentUser
                                       ? Colors.green.shade700
                                       : Colors.orange.shade700;
 
-                                  return ListTile(
+                                  return InkWell(
                                     onTap: () {
                                       Navigator.push(
                                         context,
                                         MaterialPageRoute(
                                           builder: (_) => ExpenseDetailScreen(
-                                            expenseId: expenseDoc.id,
+                                            expenseId: itemId,
                                           ),
                                         ),
                                       );
                                     },
-                                    leading: Container(
-                                      width: 54,
-                                      height: 54,
-                                      decoration: BoxDecoration(
-                                        color: _getCategoryBackgroundColor(category),
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                      child: Icon(
-                                        _getCategoryIcon(category),
-                                        color: Colors.grey[800],
-                                        size: 26,
-                                      ),
-                                    ),
-                                    title: Text(
-                                      title,
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                        color: theme.textTheme.bodyLarge?.color,
-                                        fontSize: 16,
-                                      ),
-                                      overflow: TextOverflow.ellipsis,
-                                      maxLines: 1,
-                                    ),
-                                    subtitle: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        if (date != null)
-                                          Text(
-                                            '${DateFormat('MMM dd').format(date)} • $paidByName paid ₹${amount.toStringAsFixed(2)}',
-                                            style: TextStyle(
-                                              fontSize: 13,
-                                              color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                      child: Row(
+                                        children: [
+                                          // Date Column
+                                          if (date != null)
+                                            SizedBox(
+                                              width: 35,
+                                              child: Column(
+                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                children: [
+                                                  Text(
+                                                    DateFormat('MMM').format(date),
+                                                    style: TextStyle(
+                                                      fontSize: 11,
+                                                      color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.6),
+                                                      fontWeight: FontWeight.w500,
+                                                    ),
+                                                  ),
+                                                  Text(
+                                                    DateFormat('dd').format(date),
+                                                    style: TextStyle(
+                                                      fontSize: 16,
+                                                      fontWeight: FontWeight.w600,
+                                                      color: theme.textTheme.bodyLarge?.color,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
                                             ),
-                                            overflow: TextOverflow.ellipsis,
-                                            maxLines: 1,
-                                          ),
-                                        if (splitDetails.length > 1)
-                                          Text(
-                                            '${splitDetails.length} people paid ₹${amount.toStringAsFixed(2)}',
-                                            style: TextStyle(
-                                              fontSize: 13,
-                                              color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
+                                          const SizedBox(width: 12),
+
+                                          // Category Icon
+                                          Container(
+                                            width: 40,
+                                            height: 40,
+                                            decoration: BoxDecoration(
+                                              color: _getCategoryBackgroundColor(category).withValues(alpha: 0.2),
+                                              borderRadius: BorderRadius.circular(8),
+                                            ),
+                                            child: Icon(
+                                              _getCategoryIcon(category),
+                                              color: _getCategoryBackgroundColor(category),
+                                              size: 20,
                                             ),
                                           ),
-                                      ],
-                                    ),
-                                    trailing: Column(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      crossAxisAlignment: CrossAxisAlignment.end,
-                                      children: [
-                                        Text(
-                                          statusText,
-                                          style: TextStyle(fontSize: 12, color: statusColor),
-                                        ),
-                                        Text(
-                                          '₹${userShare.toStringAsFixed(2)}',
-                                          style: TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.bold,
-                                            color: statusColor,
+                                          const SizedBox(width: 12),
+
+                                          // Details Column
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  title,
+                                                  style: TextStyle(
+                                                    fontWeight: FontWeight.w600,
+                                                    color: theme.textTheme.bodyLarge?.color,
+                                                    fontSize: 15,
+                                                  ),
+                                                  overflow: TextOverflow.ellipsis,
+                                                  maxLines: 1,
+                                                ),
+                                                const SizedBox(height: 2),
+                                                Text(
+                                                  '$paidByName paid ₹${amount.toStringAsFixed(2)}',
+                                                  style: TextStyle(
+                                                    fontSize: 13,
+                                                    color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
+                                                  ),
+                                                  overflow: TextOverflow.ellipsis,
+                                                  maxLines: 1,
+                                                ),
+                                              ],
+                                            ),
                                           ),
-                                        ),
-                                      ],
+                                          const SizedBox(width: 12),
+
+                                          // Amount Column
+                                          Column(
+                                            crossAxisAlignment: CrossAxisAlignment.end,
+                                            children: [
+                                              Text(
+                                                statusText,
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  color: statusColor.withValues(alpha: 0.8),
+                                                  fontWeight: FontWeight.w500,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 2),
+                                              Text(
+                                                '₹${userShare.toStringAsFixed(2)}',
+                                                style: TextStyle(
+                                                  fontSize: 15,
+                                                  fontWeight: FontWeight.w700,
+                                                  color: statusColor,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
                                     ),
                                   );
                                 },
@@ -542,7 +657,9 @@ class GroupHomeScreen extends StatelessWidget {
                             }).toList(),
                           ],
                         );
-                      }).toList(),
+                          }).toList(),
+                        );
+                      },
                     );
                   },
                 ),
@@ -553,11 +670,143 @@ class GroupHomeScreen extends StatelessWidget {
       ),
       floatingActionButton: FloatingButtons(
         onAddExpense: () {
-          Navigator.pushNamed(context, '/add_expense');
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => AddExpenseScreen(
+                preSelectedGroupId: group.groupId,
+                preSelectedGroupName: group.name,
+              ),
+            ),
+          );
         },
         onScan: () {
           Navigator.pushNamed(context, '/scan_qr');
         },
+      ),
+    );
+  }
+
+  Widget _buildSettlementItem(Map<String, dynamic> settlement, String currentUserId, ThemeData theme) {
+    final fromUserId = settlement['fromUserId'] as String? ?? '';
+    final fromUserName = settlement['fromUserName'] as String? ?? 'Unknown';
+    final toUserId = settlement['toUserId'] as String? ?? '';
+    final toUserName = settlement['toUserName'] as String? ?? 'Unknown';
+    final amount = (settlement['amount'] as num?)?.toDouble() ?? 0.0;
+    final paymentMethod = settlement['paymentMethod'] as String? ?? 'other';
+    final timestamp = settlement['settledAt'] as Timestamp?;
+    final date = timestamp?.toDate();
+
+    final isPayer = fromUserId == currentUserId;
+    final displayText = isPayer
+        ? 'You paid $toUserName'
+        : '$fromUserName paid you';
+    final statusColor = isPayer ? Colors.orange.shade700 : Colors.green.shade700;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
+        children: [
+          // Date Column
+          if (date != null)
+            SizedBox(
+              width: 35,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    DateFormat('MMM').format(date),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.6),
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  Text(
+                    DateFormat('dd').format(date),
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: theme.textTheme.bodyLarge?.color,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          const SizedBox(width: 12),
+
+          // Payment Icon
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: statusColor.withValues(alpha: 0.2),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(
+              Icons.payment,
+              color: statusColor,
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: 12),
+
+          // Details Column
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.check_circle, color: Colors.green, size: 14),
+                    const SizedBox(width: 4),
+                    const Text(
+                      'Payment',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 15,
+                        color: Colors.green,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  displayText,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+
+          // Amount Column
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                isPayer ? 'you paid' : 'received',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: statusColor.withValues(alpha: 0.8),
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                '₹${amount.toStringAsFixed(2)}',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: statusColor,
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -603,5 +852,274 @@ class GroupHomeScreen extends StatelessWidget {
     }
 
     return messages;
+  }
+
+  // Export Handler Method
+  Future<void> _handleExport(BuildContext context, String exportType) async {
+    try {
+      // Show loading indicator
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(child: CircularProgressIndicator()),
+      );
+
+      final exportService = GroupExportService();
+      String filePath;
+
+      if (exportType == 'csv') {
+        filePath = await exportService.exportToCSV(
+          groupId: group.groupId,
+          groupName: group.name,
+        );
+      } else if (exportType == 'pdf') {
+        filePath = await exportService.exportToPDF(
+          groupId: group.groupId,
+          groupName: group.name,
+        );
+      } else {
+        throw Exception('Unknown export type');
+      }
+
+      // Close loading indicator
+      if (context.mounted) Navigator.pop(context);
+
+      // Share the file
+      final fileName = filePath.split('/').last;
+      await exportService.shareFile(filePath, fileName);
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Exported successfully as ${exportType.toUpperCase()}!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      // Close loading indicator
+      if (context.mounted) Navigator.pop(context);
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Export failed: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  // Build Action Button (Splitwise Style)
+  Widget _buildActionButton({
+    required BuildContext context,
+    required IconData icon,
+    required String label,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          width: 95,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF2A2A2A) : Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: color.withValues(alpha: 0.3),
+              width: 1.5,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.05),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, color: color, size: 22),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: theme.textTheme.bodyLarge?.color,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Settle Up Dialog Method
+  Future<void> _showSettleUpDialog(BuildContext context, String groupId, String groupName) async {
+    final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+    if (currentUserId == null) return;
+
+    // Show loading indicator
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      // DEBUG: Check if there are any expenses in this group
+      final expensesSnapshot = await FirebaseFirestore.instance
+          .collection('expenses')
+          .where('groupId', isEqualTo: groupId)
+          .get();
+
+      print('DEBUG: Found ${expensesSnapshot.docs.length} expenses in group $groupId');
+      for (var doc in expensesSnapshot.docs) {
+        final data = doc.data();
+        print('  Expense: ${data['title']}, Amount: ${data['amount']}, PaidBy: ${data['paidBy']}, SharedWith: ${data['sharedWith']}');
+      }
+
+      // Fetch group-specific simplified debts
+      final allDebts = await DebtSimplificationService().simplifyGroupDebts(groupId);
+
+      print('DEBUG: Simplified debts count: ${allDebts.length}');
+      for (var debt in allDebts) {
+        print('  Debt: ${debt.fromUserId} owes ${debt.toUserId} ₹${debt.amount}');
+      }
+
+      // Enrich debts with user names
+      final enrichedDebts = await DebtSimplificationService().enrichWithUserNames(allDebts);
+
+      // Filter debts involving current user
+      final userDebts = enrichedDebts.where((debt) =>
+        debt.fromUserId == currentUserId || debt.toUserId == currentUserId
+      ).toList();
+
+      print('DEBUG: User debts for $currentUserId: ${userDebts.length}');
+
+      // Close loading indicator
+      if (context.mounted) Navigator.pop(context);
+
+      if (userDebts.isEmpty) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('You have no pending debts in this group!'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+        return;
+      }
+
+      // Show bottom sheet with debt selection
+      if (context.mounted) {
+        showModalBottomSheet(
+          context: context,
+          isScrollControlled: true,
+          builder: (context) => _SettleUpSheet(
+            debts: userDebts,
+            groupName: groupName,
+          ),
+        );
+      }
+    } catch (e) {
+      // Close loading indicator
+      if (context.mounted) Navigator.pop(context);
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error loading debts: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+}
+
+/// Bottom sheet for selecting which debt to settle
+class _SettleUpSheet extends StatelessWidget {
+  final List<SimplifiedDebt> debts;
+  final String groupName;
+
+  const _SettleUpSheet({required this.debts, required this.groupName});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Settle Up - $groupName',
+            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Select a debt to settle:',
+            style: TextStyle(color: Colors.grey[600]),
+          ),
+          const SizedBox(height: 16),
+          ...debts.map((debt) => _buildDebtTile(context, debt)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDebtTile(BuildContext context, SimplifiedDebt debt) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: ListTile(
+        leading: const Icon(Icons.account_balance_wallet, color: Colors.teal),
+        title: Text('${debt.fromUserName} → ${debt.toUserName}'),
+        subtitle: Text('₹${debt.amount.toStringAsFixed(2)}'),
+        trailing: ElevatedButton(
+          onPressed: () {
+            Navigator.pop(context); // Close sheet
+            _openUpiSettlement(context, debt);
+          },
+          style: AppTheme.primaryButtonStyle,
+          child: const Text('Settle'),
+        ),
+      ),
+    );
+  }
+
+  void _openUpiSettlement(BuildContext context, SimplifiedDebt debt) {
+    showDialog(
+      context: context,
+      builder: (context) => UpiSettleDialog(
+        debt: debt,
+        onSettled: () {
+          // Refresh parent screen
+          Navigator.of(context).pop();
+        },
+      ),
+    );
   }
 }

@@ -37,6 +37,13 @@ class _UpiSettleDialogState extends State<UpiSettleDialog> {
   @override
   void initState() {
     super.initState();
+    print('DEBUG UpiSettleDialog: Debt received:');
+    print('  fromUserId: ${widget.debt.fromUserId}');
+    print('  fromUserName: ${widget.debt.fromUserName}');
+    print('  toUserId: ${widget.debt.toUserId}');
+    print('  toUserName: ${widget.debt.toUserName}');
+    print('  amount: ${widget.debt.amount}');
+    print('  groupId: ${widget.debt.groupId}');
     _amountController.text = widget.debt.amount.toStringAsFixed(2);
     _loadReceiverUpiId();
     _loadUpiApps();
@@ -80,13 +87,17 @@ class _UpiSettleDialogState extends State<UpiSettleDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     return AlertDialog(
+      backgroundColor: isDark ? const Color(0xFF2C2C2C) : Colors.white,
       title: Row(
         children: [
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: Colors.teal[50],
+              color: Colors.teal.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(8),
             ),
             child: const Icon(Icons.payment, color: Colors.teal),
@@ -108,17 +119,22 @@ class _UpiSettleDialogState extends State<UpiSettleDialog> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.grey[100],
+                  color: isDark ? Colors.teal.withValues(alpha: 0.15) : Colors.teal.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: Colors.teal.withValues(alpha: 0.3),
+                  ),
                 ),
                 child: Row(
                   children: [
                     CircleAvatar(
-                      backgroundColor: Colors.teal[100],
+                      backgroundColor: Colors.teal,
                       child: Text(
-                        widget.debt.toUserName[0].toUpperCase(),
-                        style: TextStyle(
-                          color: Colors.teal[700],
+                        widget.debt.toUserName.isNotEmpty
+                            ? widget.debt.toUserName[0].toUpperCase()
+                            : '?',
+                        style: const TextStyle(
+                          color: Colors.white,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -128,18 +144,22 @@ class _UpiSettleDialogState extends State<UpiSettleDialog> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
+                          Text(
                             'Paying to',
                             style: TextStyle(
                               fontSize: 12,
-                              color: Colors.grey,
+                              color: theme.textTheme.bodySmall?.color?.withValues(alpha: 0.7),
                             ),
                           ),
+                          const SizedBox(height: 4),
                           Text(
-                            widget.debt.toUserName,
-                            style: const TextStyle(
+                            widget.debt.toUserName.isNotEmpty
+                                ? widget.debt.toUserName
+                                : 'Unknown User',
+                            style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
+                              color: theme.textTheme.bodyLarge?.color,
                             ),
                           ),
                         ],
@@ -154,14 +174,37 @@ class _UpiSettleDialogState extends State<UpiSettleDialog> {
               TextFormField(
                 controller: _amountController,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: theme.textTheme.bodyLarge?.color,
+                ),
                 decoration: InputDecoration(
                   labelText: 'Amount',
+                  labelStyle: TextStyle(color: theme.textTheme.bodyMedium?.color),
                   prefixText: '₹ ',
-                  border: const OutlineInputBorder(),
-                  prefixIcon: const Icon(Icons.currency_rupee),
+                  prefixStyle: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: theme.textTheme.bodyLarge?.color,
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: Colors.grey.withValues(alpha: 0.3)),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: Colors.teal, width: 2),
+                  ),
+                  prefixIcon: const Icon(Icons.currency_rupee, color: Colors.teal),
                   hintText: 'Enter amount',
+                  hintStyle: TextStyle(color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.5)),
                   filled: true,
-                  fillColor: Colors.grey[50],
+                  fillColor: isDark ? Colors.grey.withValues(alpha: 0.1) : Colors.grey.withValues(alpha: 0.05),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
                 ),
                 validator: (value) {
                   if (value == null || value.isEmpty) {
@@ -177,38 +220,45 @@ class _UpiSettleDialogState extends State<UpiSettleDialog> {
               const SizedBox(height: 16),
 
               // Payment method selector
-              const Text(
+              Text(
                 'Payment Method',
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.bold,
+                  color: theme.textTheme.bodyLarge?.color,
                 ),
               ),
               const SizedBox(height: 8),
-              SegmentedButton<String>(
-                segments: const [
-                  ButtonSegment(
-                    value: 'upi',
-                    label: Text('UPI'),
-                    icon: Icon(Icons.account_balance_wallet),
+              SizedBox(
+                width: double.infinity,
+                child: SegmentedButton<String>(
+                  segments: const [
+                    ButtonSegment(
+                      value: 'upi',
+                      label: Text('UPI', style: TextStyle(fontSize: 12)),
+                      icon: Icon(Icons.account_balance_wallet, size: 18),
+                    ),
+                    ButtonSegment(
+                      value: 'cash',
+                      label: Text('Cash', style: TextStyle(fontSize: 12)),
+                      icon: Icon(Icons.money, size: 18),
+                    ),
+                    ButtonSegment(
+                      value: 'other',
+                      label: Text('Other', style: TextStyle(fontSize: 12)),
+                      icon: Icon(Icons.more_horiz, size: 18),
+                    ),
+                  ],
+                  selected: {_paymentMethod},
+                  onSelectionChanged: (Set<String> selected) {
+                    setState(() {
+                      _paymentMethod = selected.first;
+                    });
+                  },
+                  style: ButtonStyle(
+                    visualDensity: VisualDensity.compact,
                   ),
-                  ButtonSegment(
-                    value: 'cash',
-                    label: Text('Cash'),
-                    icon: Icon(Icons.money),
-                  ),
-                  ButtonSegment(
-                    value: 'other',
-                    label: Text('Other'),
-                    icon: Icon(Icons.more_horiz),
-                  ),
-                ],
-                selected: {_paymentMethod},
-                onSelectionChanged: (Set<String> selected) {
-                  setState(() {
-                    _paymentMethod = selected.first;
-                  });
-                },
+                ),
               ),
               const SizedBox(height: 16),
 
@@ -216,16 +266,33 @@ class _UpiSettleDialogState extends State<UpiSettleDialog> {
               if (_paymentMethod == 'upi') ...[
                 TextFormField(
                   controller: _upiIdController,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: theme.textTheme.bodyLarge?.color,
+                  ),
                   decoration: InputDecoration(
                     labelText: 'Receiver UPI ID',
-                    border: const OutlineInputBorder(),
-                    prefixIcon: const Icon(Icons.alternate_email),
+                    labelStyle: TextStyle(color: theme.textTheme.bodyMedium?.color),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: Colors.grey.withValues(alpha: 0.3)),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Colors.teal, width: 2),
+                    ),
+                    prefixIcon: const Icon(Icons.alternate_email, color: Colors.teal),
                     hintText: 'user@paytm',
+                    hintStyle: TextStyle(color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.5)),
                     filled: true,
-                    fillColor: Colors.grey[50],
+                    fillColor: isDark ? Colors.grey.withValues(alpha: 0.1) : Colors.grey.withValues(alpha: 0.05),
                     suffixIcon: _receiverUpiId != null
                         ? const Icon(Icons.verified, color: Colors.green)
                         : null,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
                   ),
                   validator: (value) {
                     if (_paymentMethod == 'upi') {
@@ -254,13 +321,30 @@ class _UpiSettleDialogState extends State<UpiSettleDialog> {
               // Notes field
               TextFormField(
                 controller: _notesController,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: theme.textTheme.bodyLarge?.color,
+                ),
                 decoration: InputDecoration(
                   labelText: 'Notes (optional)',
-                  border: const OutlineInputBorder(),
-                  prefixIcon: const Icon(Icons.note),
+                  labelStyle: TextStyle(color: theme.textTheme.bodyMedium?.color),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: Colors.grey.withValues(alpha: 0.3)),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: Colors.teal, width: 2),
+                  ),
+                  prefixIcon: const Icon(Icons.note, color: Colors.teal),
                   hintText: 'Add a note',
+                  hintStyle: TextStyle(color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.5)),
                   filled: true,
-                  fillColor: Colors.grey[50],
+                  fillColor: isDark ? Colors.grey.withValues(alpha: 0.1) : Colors.grey.withValues(alpha: 0.05),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
                 ),
                 maxLines: 2,
               ),

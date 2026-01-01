@@ -42,6 +42,11 @@ class DebtSimplificationService {
         }).toList(),
       );
 
+      print('DEBUG: Net balances for group $groupId:');
+      netBalances.forEach((userId, balance) {
+        print('  User $userId: ₹${balance.toStringAsFixed(2)}');
+      });
+
       // Apply simplification algorithm
       return _simplifyDebts(netBalances, groupId: groupId, groupName: groupName);
     } catch (e) {
@@ -173,6 +178,18 @@ class DebtSimplificationService {
     final balances = <String, double>{};
 
     for (final expense in expenses) {
+      // Skip expenses with null or empty sharedWith
+      if (expense.sharedWith.isEmpty) {
+        print('WARNING: Skipping expense "${expense.title}" - sharedWith is empty');
+        continue;
+      }
+
+      print('DEBUG: Processing expense "${expense.title}"');
+      print('  Amount: ₹${expense.amount}');
+      print('  PaidBy: ${expense.paidBy}');
+      print('  SharedWith: ${expense.sharedWith}');
+      print('  SharedWith includes payer: ${expense.sharedWith.contains(expense.paidBy)}');
+
       // Add amount paid by payer
       balances[expense.paidBy] = (balances[expense.paidBy] ?? 0) + expense.amount;
 
@@ -181,26 +198,64 @@ class DebtSimplificationService {
       for (final userId in expense.sharedWith) {
         balances[userId] = (balances[userId] ?? 0) - sharePerPerson;
       }
+
+      print('  Share per person: ₹${sharePerPerson.toStringAsFixed(2)}');
+      print('  After this expense, balances:');
+      balances.forEach((userId, balance) {
+        print('    $userId: ₹${balance.toStringAsFixed(2)}');
+      });
     }
 
-    // Account for any settlements
-    await _applySettlements(balances);
+    // Account for any settlements (with error handling)
+    try {
+      await _applySettlements(balances);
+    } catch (e) {
+      print('Warning: Could not apply settlements: $e');
+      // Continue without settlements - not critical
+    }
 
     return balances;
   }
 
   /// Apply recorded settlements to balances
   Future<void> _applySettlements(Map<String, double> balances) async {
+    final User? user = _auth.currentUser;
+    if (user == null) return;
+
     // Get recent settlements (last 6 months)
     final sixMonthsAgo = DateTime.now().subtract(const Duration(days: 180));
 
-    final settlementsSnapshot = await _firestore
+    // Query settlements where current user is sender
+    final sentSettlementsSnapshot = await _firestore
         .collection('settlements')
+        .where('fromUserId', isEqualTo: user.uid)
         .where('settledAt', isGreaterThan: Timestamp.fromDate(sixMonthsAgo))
         .where('isVerified', isEqualTo: true)
         .get();
 
-    for (final doc in settlementsSnapshot.docs) {
+    // Query settlements where current user is receiver
+    final receivedSettlementsSnapshot = await _firestore
+        .collection('settlements')
+        .where('toUserId', isEqualTo: user.uid)
+        .where('settledAt', isGreaterThan: Timestamp.fromDate(sixMonthsAgo))
+        .where('isVerified', isEqualTo: true)
+        .get();
+
+    // Apply sent settlements
+    for (final doc in sentSettlementsSnapshot.docs) {
+      final settlement = SettlementModel.fromDocument(doc);
+
+      // Payer's balance increases (they paid off debt)
+      balances[settlement.fromUserId] =
+          (balances[settlement.fromUserId] ?? 0) + settlement.amount;
+
+      // Receiver's balance decreases (they received payment)
+      balances[settlement.toUserId] =
+          (balances[settlement.toUserId] ?? 0) - settlement.amount;
+    }
+
+    // Apply received settlements
+    for (final doc in receivedSettlementsSnapshot.docs) {
       final settlement = SettlementModel.fromDocument(doc);
 
       // Payer's balance increases (they paid off debt)
