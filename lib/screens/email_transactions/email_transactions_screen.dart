@@ -1,12 +1,19 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:spendpal/services/email_transaction_parser_service.dart';
 import 'package:spendpal/services/gmail_service.dart';
+import 'package:spendpal/services/generic_transaction_parser_service.dart';
+import 'package:spendpal/services/local_db_service.dart';
+import 'package:spendpal/services/account_tracker_service.dart';
+import 'package:spendpal/services/transaction_display_service.dart';
+import 'package:spendpal/models/local_transaction_model.dart';
 import 'package:spendpal/theme/app_theme.dart';
+import 'package:spendpal/widgets/tracker_badge_widget.dart';
 import 'package:intl/intl.dart';
 import 'upload_email_screenshot_screen.dart';
 import 'pattern_management_screen.dart';
+import '../trackers/account_tracker_screen.dart';
 
 class EmailTransactionsScreen extends StatefulWidget {
   const EmailTransactionsScreen({super.key});
@@ -20,10 +27,50 @@ class _EmailTransactionsScreenState extends State<EmailTransactionsScreen> {
   bool _isGmailConnected = false;
   bool _isCheckingGmail = true;
 
+  // Date range filter (default: last 30 days)
+  int _selectedDays = 30;
+  final List<int> _durationOptions = [7, 15, 30, 60, 90];
+
+  // Search
+  final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
+  final ValueNotifier<String> _searchQueryNotifier = ValueNotifier<String>('');
+  Timer? _debounceTimer;
+
+  // Bulk selection
+  bool _selectionMode = false;
+  final Set<String> _selectedEmails = {};
+
+  // Transaction count for display
+  int _transactionCount = 0;
+
+  // Sorting
+  String _sortBy = 'date'; // date, amount, merchant
+  bool _sortAscending = false;
+
   @override
   void initState() {
     super.initState();
     _checkGmailAccess();
+    _searchController.addListener(_onSearchChanged);
+  }
+
+  void _onSearchChanged() {
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(const Duration(milliseconds: 300), () {
+      if (mounted) {
+        _searchQueryNotifier.value = _searchController.text;
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _debounceTimer?.cancel();
+    _searchController.dispose();
+    _searchFocusNode.dispose();
+    _searchQueryNotifier.dispose();
+    super.dispose();
   }
 
   Future<void> _checkGmailAccess() async {
@@ -34,6 +81,34 @@ class _EmailTransactionsScreenState extends State<EmailTransactionsScreen> {
         _isCheckingGmail = false;
       });
     }
+  }
+
+  /// Load email transactions with cross-source deduplication (Email + SMS)
+  Future<List<TransactionWithMergeInfo>> _loadEmailTransactionsWithDedup(String userId) async {
+    // Load both email AND SMS transactions to detect cross-source duplicates
+    final emailTransactions = await LocalDBService.instance.getTransactions(
+      userId: userId,
+      source: TransactionSource.email,
+      status: TransactionStatus.pending,
+    );
+
+    final smsTransactions = await LocalDBService.instance.getTransactions(
+      userId: userId,
+      source: TransactionSource.sms,
+      status: TransactionStatus.pending,
+    );
+
+    // Combine both sources
+    final allTransactions = [...emailTransactions, ...smsTransactions];
+
+    // Sort by date (newest first)
+    allTransactions.sort((a, b) => b.transactionDate.compareTo(a.transactionDate));
+
+    // Apply deduplication and get merge info
+    final mergedList = TransactionDisplayService.filterAndMergeDuplicates(allTransactions);
+
+    // Filter to show only email transactions (but with merge badges if duplicates exist in SMS)
+    return mergedList.where((m) => m.transaction.source == TransactionSource.email).toList();
   }
 
   Future<void> _connectGmail() async {
@@ -103,6 +178,124 @@ class _EmailTransactionsScreenState extends State<EmailTransactionsScreen> {
       return;
     }
 
+    // Show date range picker before syncing
+    int? selectedDaysTemp = _selectedDays;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Select Date Range'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Choose how far back to sync emails:'),
+              const SizedBox(height: 16),
+              ..._durationOptions.map((days) {
+                return RadioListTile<int>(
+                  title: Text('Last $days days'),
+                  value: days,
+                  groupValue: selectedDaysTemp,
+                  onChanged: (value) {
+                    setDialogState(() {
+                      selectedDaysTemp = value!;
+                    });
+                  },
+                );
+              }),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                setState(() {
+                  _selectedDays = selectedDaysTemp!;
+                });
+                Navigator.pop(context, true);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.tealAccent,
+              ),
+              child: const Text('Start Sync'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    // Check if user has configured any trackers
+    final hasTrackers = await AccountTrackerService.hasTrackers(userId);
+
+    if (!hasTrackers) {
+      // Show tracker setup prompt
+      if (mounted) {
+        final setupTrackers = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Setup Account Trackers'),
+            content: const SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'To sync emails, first configure which accounts you want to track.',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  SizedBox(height: 12),
+                  Text('Examples:'),
+                  SizedBox(height: 8),
+                  Text('• HDFC Bank, ICICI Bank, SBI'),
+                  Text('• Zerodha, Groww'),
+                  Text('• NPS, PPF'),
+                  Text('• Paytm, PhonePe'),
+                  SizedBox(height: 12),
+                  Text(
+                    'Benefits:',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  SizedBox(height: 8),
+                  Text('✓ Faster syncs (only your accounts)'),
+                  Text('✓ Better privacy (targeted searches)'),
+                  Text('✓ Easy to manage'),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context, true),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.tealAccent,
+                ),
+                child: const Text('Setup Trackers'),
+              ),
+            ],
+          ),
+        );
+
+        if (setupTrackers == true) {
+          // Navigate to tracker setup screen
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const AccountTrackerScreen(),
+            ),
+          );
+        }
+      }
+      return;
+    }
+
     setState(() => _isCheckingGmail = true);
 
     // Show progress dialog
@@ -132,99 +325,97 @@ class _EmailTransactionsScreenState extends State<EmailTransactionsScreen> {
     }
 
     try {
-      // Fetch transaction emails - no date filter for debugging
-      final messages = await GmailService.searchTransactionEmails(
+      print('═══════════════════════════════════════════════════════');
+      print('🔄 STARTING EMAIL SYNC WITH TRACKER-BASED SEARCH');
+      print('═══════════════════════════════════════════════════════');
+      print('📅 Date range: Last $_selectedDays days');
+      print('🔐 User ID: $userId');
+
+      final startDate = DateTime.now().subtract(Duration(days: _selectedDays));
+      print('📆 From: ${startDate.toIso8601String()}');
+      print('📆 To: ${DateTime.now().toIso8601String()}');
+
+      // Get active trackers for statistics tracking
+      print('\n📊 Loading active trackers for statistics...');
+      final activeTrackers = await AccountTrackerService.getActiveTrackers(userId);
+      print('✅ Found ${activeTrackers.length} active trackers');
+
+      // Map to track email count per tracker
+      final Map<String, int> trackerEmailCounts = {};
+      for (final tracker in activeTrackers) {
+        trackerEmailCounts[tracker.id] = 0;
+      }
+
+      // Fetch transaction emails using tracker-based search
+      print('\n🔍 Searching Gmail using configured trackers...');
+      final messages = await GmailService.searchTransactionEmailsFromTrackers(
+        userId: userId,
+        after: startDate,
         maxResults: 100,
       );
 
       final totalEmails = messages.length;
-      int addedCount = 0;
-      int skippedCount = 0;
-      int currentIndex = 0;
-      final List<String> errors = [];
+      print('✅ Gmail search complete');
+      print('📧 Found $totalEmails emails matching criteria');
+
+      if (totalEmails == 0) {
+        setState(() => _isCheckingGmail = false);
+        if (mounted) {
+          showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('Sync Complete'),
+              content: const Text('No transaction emails found in the selected date range.'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('OK'),
+                ),
+              ],
+            ),
+          );
+        }
+        return;
+      }
+
+      final List<BulkTransactionItem> emailItems = [];
       final List<String> networkErrors = [];
 
-      // Update progress dialog with total found
+      // Show fetching progress
       if (mounted) {
-        Navigator.pop(context); // Close initial progress
+        Navigator.pop(context); // Close date picker dialog
         showDialog(
           context: context,
           barrierDismissible: false,
-          builder: (BuildContext context) {
-            return StatefulBuilder(
-              builder: (context, setDialogState) {
-                return AlertDialog(
-                  title: const Text('Processing Emails'),
-                  content: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Found $totalEmails emails'),
-                      const SizedBox(height: 8),
-                      Text('Processing: $currentIndex / $totalEmails'),
-                      Text('Parsed: $addedCount'),
-                      if (networkErrors.isNotEmpty)
-                        Text('Network errors: ${networkErrors.length}',
-                          style: const TextStyle(color: Colors.orange)),
-                      const SizedBox(height: 16),
-                      LinearProgressIndicator(
-                        value: totalEmails > 0 ? currentIndex / totalEmails : 0,
-                      ),
-                    ],
-                  ),
-                );
-              },
-            );
-          },
+          builder: (context) => AlertDialog(
+            title: const Text('Fetching Emails'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const CircularProgressIndicator(color: AppTheme.tealAccent),
+                const SizedBox(height: 16),
+                Text('Downloading $totalEmails emails...'),
+              ],
+            ),
+          ),
         );
       }
 
+      // Fetch email content and create BulkTransactionItem objects
+      print('\n📥 FETCHING EMAIL DETAILS');
+      print('───────────────────────────────────────────────────────');
+      int currentIndex = 0;
       for (final message in messages) {
         currentIndex++;
+        print('\n📧 Email $currentIndex/$totalEmails');
+        print('  ID: ${message.id}');
 
         try {
-          // Get full email details with retry
           final email = await GmailService.getEmailDetails(message.id!);
 
-          // Update progress
-          if (mounted) {
-            Navigator.pop(context);
-            showDialog(
-              context: context,
-              barrierDismissible: false,
-              builder: (BuildContext context) {
-                return AlertDialog(
-                  title: const Text('Processing Emails'),
-                  content: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Found $totalEmails emails'),
-                      const SizedBox(height: 8),
-                      Text('Processing: $currentIndex / $totalEmails'),
-                      Text('Parsed: $addedCount'),
-                      if (networkErrors.isNotEmpty)
-                        Text('Network errors: ${networkErrors.length}',
-                          style: const TextStyle(color: Colors.orange)),
-                      const SizedBox(height: 16),
-                      LinearProgressIndicator(
-                        value: totalEmails > 0 ? currentIndex / totalEmails : 0,
-                      ),
-                    ],
-                  ),
-                );
-              },
-            );
-          }
-
           if (email == null) {
-            skippedCount++;
-            final errorMsg = 'Email ${message.id} - Could not fetch details';
-            errors.add(errorMsg);
-            // Check if it's a network error
-            if (GmailService.lastSearchError?.toLowerCase().contains('network') ?? false) {
-              networkErrors.add(errorMsg);
-            }
+            networkErrors.add('Email ${message.id} - Could not fetch');
+            print('  ❌ Could not fetch email details');
             continue;
           }
 
@@ -234,53 +425,204 @@ class _EmailTransactionsScreenState extends State<EmailTransactionsScreen> {
           final body = GmailService.extractTextBody(email);
           final date = GmailService.extractDate(email);
 
-          if (sender == null || subject == null || date == null) {
-            skippedCount++;
-            errors.add('Email from ${sender ?? "unknown"} - Missing required fields');
+          print('  From: $sender');
+          print('  Subject: $subject');
+          print('  Date: $date');
+          print('  Body length: ${body?.length ?? 0} chars');
+
+          if (sender == null || date == null) {
+            print('  ⚠️ SKIPPING - Missing required fields (sender=$sender, date=$date)');
             continue;
           }
 
-          // Parse the email
-          final parsedData = EmailTransactionParserService.parseEmail(
-            senderEmail: sender,
-            subject: subject,
-            body: body,
-            receivedAt: date,
-          );
-
-          if (parsedData != null) {
-            // Add to queue
-            final added = await EmailTransactionParserService.addToQueue(
-              userId: userId,
-              parsedData: parsedData,
-            );
-
-            if (added) {
-              addedCount++;
-            } else {
-              skippedCount++;
-              errors.add('Email from $sender - Failed to add to queue');
+          // Match email to tracker based on sender domain
+          String? matchedTrackerId;
+          for (final tracker in activeTrackers) {
+            for (final domain in tracker.emailDomains) {
+              if (sender.toLowerCase().contains(domain.toLowerCase())) {
+                matchedTrackerId = tracker.id;
+                trackerEmailCounts[tracker.id] = (trackerEmailCounts[tracker.id] ?? 0) + 1;
+                print('  📊 Matched to tracker: ${tracker.name}');
+                break;
+              }
             }
-          } else {
-            skippedCount++;
-            errors.add('Email from $sender: "$subject" - Could not parse transaction');
+            if (matchedTrackerId != null) break;
           }
-        } catch (e) {
-          skippedCount++;
-          errors.add('Error processing message ${message.id}: $e');
+
+          // Create email text combining subject and body
+          final emailText = '${subject ?? ''}\n${body ?? ''}';
+          print('  Email text length: ${emailText.length} chars');
+          print('  Email preview: ${emailText.substring(0, emailText.length > 100 ? 100 : emailText.length)}...');
+
+          // Add to bulk processing list
+          emailItems.add(BulkTransactionItem(
+            index: currentIndex,
+            text: emailText,
+            sender: sender,
+            date: date,
+            source: TransactionSource.email,
+          ));
+
+          print('  ✅ Added to processing queue');
+        } catch (e, stackTrace) {
+          networkErrors.add('Error fetching email ${message.id}: $e');
+          print('  ❌ ERROR: $e');
+          print('  Stack: ${stackTrace.toString().split('\n').take(3).join('\n')}');
         }
       }
+
+      print('\n───────────────────────────────────────────────────────');
+      print('📦 BATCH PREPARATION COMPLETE');
+      print('  Total fetched: ${emailItems.length}/${totalEmails}');
+      print('  Network errors: ${networkErrors.length}');
+      if (networkErrors.isNotEmpty) {
+        print('  Errors: ${networkErrors.join(", ")}');
+      }
+      print('───────────────────────────────────────────────────────');
+
+      // Close fetching dialog
+      if (mounted) {
+        Navigator.pop(context);
+      }
+
+      if (emailItems.isEmpty) {
+        setState(() => _isCheckingGmail = false);
+        if (mounted) {
+          showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('Sync Complete'),
+              content: Text('Could not fetch any emails.\n${networkErrors.length} network errors.'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('OK'),
+                ),
+              ],
+            ),
+          );
+        }
+        return;
+      }
+
+      // Show AI parsing progress
+      if (mounted) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => AlertDialog(
+            title: const Text('AI Parsing'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const CircularProgressIndicator(color: AppTheme.tealAccent),
+                const SizedBox(height: 16),
+                Text('Parsing ${emailItems.length} emails with AI...'),
+                const SizedBox(height: 8),
+                const Text(
+                  'This may take a minute',
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+              ],
+            ),
+          ),
+        );
+      }
+
+      // Parse emails using AI and save to local SQLite
+      // Emails are longer than SMS, use smaller batch size
+      print('\n🤖 AI PARSING PHASE');
+      print('═══════════════════════════════════════════════════════');
+      print('📤 Preparing to parse ${emailItems.length} emails...');
+      print('🔐 User ID: $userId');
+      print('🌐 Cloud Function: parseBulkTransactions');
+      print('📦 Batch size: 10 emails per batch (smaller due to email length)');
+
+      final parseStartTime = DateTime.now();
+      final allParsedTransactions = <LocalTransactionModel>[];
+
+      // Process in batches of 10 (emails are much longer than SMS)
+      final batchSize = 10;
+      final totalBatches = (emailItems.length / batchSize).ceil();
+
+      for (int batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
+        final startIdx = batchIndex * batchSize;
+        final endIdx = (startIdx + batchSize < emailItems.length)
+            ? startIdx + batchSize
+            : emailItems.length;
+
+        final batch = emailItems.sublist(startIdx, endIdx);
+
+        print('\n📦 Processing batch ${batchIndex + 1}/$totalBatches (${batch.length} emails)...');
+
+        try {
+          final batchResults = await GenericTransactionParserService.parseBulkTransactions(
+            items: batch,
+            userId: userId,
+          );
+
+          allParsedTransactions.addAll(batchResults);
+          print('✅ Batch ${batchIndex + 1}: ${batchResults.length} transactions found');
+        } catch (e) {
+          print('❌ Batch ${batchIndex + 1} failed: $e');
+        }
+      }
+
+      final parseEndTime = DateTime.now();
+      final parseDuration = parseEndTime.difference(parseStartTime);
+
+      print('\n✅ AI PARSING COMPLETE');
+      print('═══════════════════════════════════════════════════════');
+      print('⏱️  Duration: ${parseDuration.inSeconds}s');
+      print('📥 Input: ${emailItems.length} emails in $totalBatches batches');
+      print('📤 Output: ${allParsedTransactions.length} transactions');
+      print('💾 Saved to: Local SQLite database');
+      print('📊 Success rate: ${((allParsedTransactions.length / emailItems.length) * 100).toStringAsFixed(1)}%');
+
+      if (allParsedTransactions.isNotEmpty) {
+        print('\n📋 Sample transactions:');
+        for (var i = 0; i < (allParsedTransactions.length > 3 ? 3 : allParsedTransactions.length); i++) {
+          final t = allParsedTransactions[i];
+          print('  ${i + 1}. ${t.merchant} - ₹${t.amount} (${t.isDebit ? "Debit" : "Credit"})');
+        }
+      } else {
+        print('⚠️  WARNING: No transactions extracted from emails!');
+      }
+      print('═══════════════════════════════════════════════════════');
+
+      final parsedTransactions = allParsedTransactions;
 
       setState(() => _isCheckingGmail = false);
 
       // Update last sync time
       await GmailService.updateLastSyncTime();
 
+      // Update tracker statistics
+      print('\n📊 UPDATING TRACKER STATISTICS');
+      print('───────────────────────────────────────────────────────');
+      for (final trackerId in trackerEmailCounts.keys) {
+        final count = trackerEmailCounts[trackerId] ?? 0;
+        if (count > 0) {
+          final tracker = activeTrackers.firstWhere((t) => t.id == trackerId);
+          print('  Tracker: ${tracker.name}');
+          print('  Emails found: $count');
+
+          // Increment email count
+          await AccountTrackerService.incrementEmailsFetched(userId, trackerId, count);
+
+          // Update last sync time
+          await AccountTrackerService.updateLastSyncTime(userId, trackerId);
+
+          print('  ✅ Statistics updated');
+        }
+      }
+      print('───────────────────────────────────────────────────────');
+
       if (mounted) {
-        // Close progress dialog
+        // Close AI parsing dialog
         Navigator.pop(context);
 
-        // Show detailed result dialog
+        // Show result dialog
         showDialog(
           context: context,
           builder: (context) => AlertDialog(
@@ -290,9 +632,42 @@ class _EmailTransactionsScreenState extends State<EmailTransactionsScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Total emails found: $totalEmails'),
-                  Text('Successfully added: $addedCount'),
-                  Text('Skipped: $skippedCount'),
+                  Text('Total emails fetched: $totalEmails'),
+                  Text('Successfully parsed: ${parsedTransactions.length}'),
+                  Text('Saved to local database: ${parsedTransactions.length}'),
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppTheme.tealAccent.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AppTheme.tealAccent.withValues(alpha: 0.3)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: const [
+                            Icon(Icons.check_circle, color: AppTheme.tealAccent, size: 20),
+                            SizedBox(width: 8),
+                            Text(
+                              'AI Parsing Complete',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: AppTheme.tealAccent,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Transactions are now in your review queue.\n'
+                          'You can categorize and import them below.',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ),
                   if (networkErrors.isNotEmpty) ...[
                     const SizedBox(height: 12),
                     Container(
@@ -332,34 +707,6 @@ class _EmailTransactionsScreenState extends State<EmailTransactionsScreen> {
                       ),
                     ),
                   ],
-                  const SizedBox(height: 16),
-                  const Text('Debug Info:', style: TextStyle(fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 8),
-                  if (GmailService.lastSearchQuery != null) ...[
-                    const Text('Query:', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
-                    SelectableText(
-                      GmailService.lastSearchQuery!,
-                      style: const TextStyle(fontSize: 10, fontFamily: 'monospace'),
-                    ),
-                  ],
-                  if (GmailService.lastSearchError != null) ...[
-                    const Text('Error:', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.red)),
-                    SelectableText(
-                      GmailService.lastSearchError!,
-                      style: const TextStyle(fontSize: 10, color: Colors.red),
-                    ),
-                  ],
-                  if (errors.isNotEmpty) ...[
-                    const SizedBox(height: 16),
-                    const Text('Details:', style: TextStyle(fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 8),
-                    ...errors.take(10).map((error) => Padding(
-                      padding: const EdgeInsets.only(bottom: 4),
-                      child: Text('• $error', style: const TextStyle(fontSize: 12)),
-                    )),
-                    if (errors.length > 10)
-                      Text('... and ${errors.length - 10} more'),
-                  ],
                 ],
               ),
             ),
@@ -380,15 +727,43 @@ class _EmailTransactionsScreenState extends State<EmailTransactionsScreen> {
           ),
         );
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
+      print('\n❌❌❌ SYNC ERROR ❌❌❌');
+      print('═══════════════════════════════════════════════════════');
+      print('Error type: ${e.runtimeType}');
+      print('Error message: $e');
+      print('\n📍 Stack trace:');
+      print(stackTrace.toString().split('\n').take(10).join('\n'));
+      print('═══════════════════════════════════════════════════════');
+
       setState(() => _isCheckingGmail = false);
 
       if (mounted) {
+        // Close any open dialogs
+        Navigator.of(context).popUntil((route) => route.isFirst);
+
         showDialog(
           context: context,
           builder: (context) => AlertDialog(
             title: const Text('Sync Error'),
-            content: Text('Error syncing emails: $e'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Failed to sync emails:'),
+                  const SizedBox(height: 8),
+                  Text(
+                    '$e',
+                    style: const TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 12,
+                      color: Colors.red,
+                    ),
+                  ),
+                ],
+              ),
+            ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context),
@@ -416,9 +791,50 @@ class _EmailTransactionsScreenState extends State<EmailTransactionsScreen> {
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
-        title: const Text('Email Transactions'),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Email Transactions'),
+            Text(
+              _transactionCount == 1 ? '1 transaction' : '$_transactionCount transactions',
+              style: TextStyle(
+                color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
+                fontSize: 12,
+                fontWeight: FontWeight.normal,
+              ),
+            ),
+          ],
+        ),
         elevation: 0,
         actions: [
+          // Sync emails button
+          IconButton(
+            icon: _isCheckingGmail
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                  )
+                : const Icon(Icons.sync),
+            tooltip: 'Sync Emails',
+            onPressed: _isCheckingGmail ? null : _syncEmails,
+          ),
+          // Account trackers button
+          IconButton(
+            icon: const Icon(Icons.account_balance_wallet),
+            tooltip: 'Manage Account Trackers',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const AccountTrackerScreen(),
+                ),
+              );
+            },
+          ),
           // Upload email screenshot button
           IconButton(
             icon: const Icon(Icons.camera_alt),
@@ -447,8 +863,8 @@ class _EmailTransactionsScreenState extends State<EmailTransactionsScreen> {
           ),
         ],
       ),
-      body: StreamBuilder<List<Map<String, dynamic>>>(
-        stream: EmailTransactionParserService.getPendingEmails(userId: userId),
+      body: FutureBuilder<List<TransactionWithMergeInfo>>(
+        future: _loadEmailTransactionsWithDedup(userId),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(
@@ -481,9 +897,18 @@ class _EmailTransactionsScreenState extends State<EmailTransactionsScreen> {
             );
           }
 
-          final pendingEmails = snapshot.data ?? [];
+          final allEmails = snapshot.data ?? [];
 
-          if (pendingEmails.isEmpty) {
+          // Update transaction count for display in AppBar
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted && _transactionCount != allEmails.length) {
+              setState(() {
+                _transactionCount = allEmails.length;
+              });
+            }
+          });
+
+          if (allEmails.isEmpty) {
             return Center(
               child: Padding(
                 padding: const EdgeInsets.all(32),
@@ -613,12 +1038,99 @@ class _EmailTransactionsScreenState extends State<EmailTransactionsScreen> {
             );
           }
 
-          return ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: pendingEmails.length,
-            itemBuilder: (context, index) {
-              final email = pendingEmails[index];
-              return _buildEmailCard(context, theme, email, userId);
+          return ValueListenableBuilder<String>(
+            valueListenable: _searchQueryNotifier,
+            builder: (context, searchQuery, _) {
+              final filteredEmails = _filterAndSortEmails(allEmails);
+
+              return Stack(
+                children: [
+                  Column(
+                    children: [
+                      // Search bar
+                      Container(
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                        child: TextField(
+                          controller: _searchController,
+                          focusNode: _searchFocusNode,
+                          decoration: InputDecoration(
+                            hintText: 'Search merchant, subject, amount...',
+                            hintStyle: TextStyle(
+                              color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.5),
+                            ),
+                            prefixIcon: Icon(Icons.search, color: theme.textTheme.bodyMedium?.color),
+                            suffixIcon: searchQuery.isNotEmpty
+                                ? IconButton(
+                                    icon: const Icon(Icons.clear),
+                                    onPressed: () {
+                                      _searchController.clear();
+                                      _searchFocusNode.unfocus();
+                                    },
+                                  )
+                                : null,
+                            filled: true,
+                            fillColor: theme.cardTheme.color,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide.none,
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          ),
+                        ),
+                      ),
+
+                      // Filter/Sort bar
+                      if (!_selectionMode) _buildFilterSortBar(allEmails),
+
+                      // Selection header
+                      if (_selectionMode) _buildSelectionHeader(filteredEmails),
+
+                      // Email list
+                      Expanded(
+                        child: filteredEmails.isEmpty
+                            ? Center(
+                                child: Padding(
+                                  padding: const EdgeInsets.all(32),
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        Icons.search_off,
+                                        size: 64,
+                                        color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.3),
+                                      ),
+                                      const SizedBox(height: 16),
+                                      Text(
+                                        'No emails match your filters',
+                                        style: TextStyle(
+                                          color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.6),
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              )
+                            : ListView.builder(
+                                padding: EdgeInsets.fromLTRB(16, 0, 16, _selectionMode ? 80 : 16),
+                                itemCount: filteredEmails.length,
+                                itemBuilder: (context, index) {
+                                  final email = filteredEmails[index];
+                                  if (_selectionMode) {
+                                    return _buildSelectableCard(email, theme, userId);
+                                  }
+                                  return _buildEmailCard(context, theme, email, userId);
+                                },
+                              ),
+                      ),
+                    ],
+                  ),
+
+                  // Bulk action bar
+                  if (_selectionMode && _selectedEmails.isNotEmpty)
+                    _buildBulkActionBar(allEmails),
+                ],
+              );
             },
           );
         },
@@ -629,44 +1141,15 @@ class _EmailTransactionsScreenState extends State<EmailTransactionsScreen> {
   Widget _buildEmailCard(
     BuildContext context,
     ThemeData theme,
-    Map<String, dynamic> email,
+    TransactionWithMergeInfo emailInfo,
     String userId,
   ) {
-    final queueId = email['id'] as String;
-    final type = email['type'] as String? ?? 'unknown';
-    final amount = (email['amount'] as num?)?.toDouble() ?? 0.0;
-    final merchant = email['merchant'] as String? ?? 'Unknown Merchant';
-    final subject = email['subject'] as String? ?? '';
-    final senderEmail = email['senderEmail'] as String? ?? '';
-    final transactionDate = (email['transactionDate'] as Timestamp?)?.toDate();
-
-    // Determine transaction type color and icon
-    IconData typeIcon;
-    Color typeColor;
-    String typeLabel;
-
-    switch (type) {
-      case 'debit':
-      case 'upi':
-        typeIcon = Icons.arrow_upward;
-        typeColor = AppTheme.orangeAccent;
-        typeLabel = type.toUpperCase();
-        break;
-      case 'credit':
-        typeIcon = Icons.arrow_downward;
-        typeColor = Colors.green;
-        typeLabel = 'CREDIT';
-        break;
-      case 'credit_card':
-        typeIcon = Icons.credit_card;
-        typeColor = Colors.purple;
-        typeLabel = 'CC';
-        break;
-      default:
-        typeIcon = Icons.help_outline;
-        typeColor = Colors.grey;
-        typeLabel = type.toUpperCase();
-    }
+    final email = emailInfo.transaction;
+    final amount = email.amount;
+    final merchant = email.merchant;
+    final senderEmail = email.sourceIdentifier ?? '';
+    final transactionDate = email.transactionDate;
+    final category = email.category;
 
     return Card(
       color: theme.cardTheme.color,
@@ -674,133 +1157,174 @@ class _EmailTransactionsScreenState extends State<EmailTransactionsScreen> {
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: InkWell(
-        onTap: () => _showEmailDetail(context, theme, email, userId),
+        onTap: () => _showEmailDetail(context, theme, emailInfo, userId),
         borderRadius: BorderRadius.circular(12),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header: Type badge + Amount
+              // Header: Receipt icon + Merchant + Amount (matching SMS layout)
               Row(
                 children: [
-                  // Type badge
+                  // Receipt icon in teal circle (matching SMS)
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: typeColor.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(6),
+                      color: AppTheme.tealAccent.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(10),
                     ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
+                    child: const Icon(
+                      Icons.email_outlined,
+                      color: AppTheme.tealAccent,
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  // Merchant name and date
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(typeIcon, color: typeColor, size: 14),
-                        const SizedBox(width: 4),
                         Text(
-                          typeLabel,
+                          merchant,
                           style: TextStyle(
-                            color: typeColor,
-                            fontSize: 11,
+                            color: theme.textTheme.bodyLarge?.color,
+                            fontSize: 16,
                             fontWeight: FontWeight.bold,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          transactionDate != null
+                              ? DateFormat('dd MMM yyyy, hh:mm a').format(transactionDate)
+                              : 'Unknown date',
+                          style: TextStyle(
+                            color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
+                            fontSize: 12,
                           ),
                         ),
                       ],
                     ),
                   ),
-                  const Spacer(),
-                  // Amount
+                  // Amount (matching SMS teal color)
                   Text(
                     '₹${amount.toStringAsFixed(2)}',
-                    style: TextStyle(
-                      fontSize: 20,
+                    style: const TextStyle(
+                      color: AppTheme.tealAccent,
+                      fontSize: 18,
                       fontWeight: FontWeight.bold,
-                      color: type == 'credit' ? Colors.green : AppTheme.orangeAccent,
                     ),
                   ),
                 ],
               ),
               const SizedBox(height: 12),
-              // Merchant
-              Text(
-                merchant,
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: theme.textTheme.bodyLarge?.color,
-                ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 8),
-              // Email subject
-              Text(
-                subject,
-                style: TextStyle(
-                  fontSize: 13,
-                  color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 4),
-              // Sender and date
+              // Category and sender email chips (matching SMS style)
               Row(
                 children: [
-                  Icon(
-                    Icons.email,
-                    size: 14,
-                    color: theme.textTheme.bodySmall?.color?.withValues(alpha: 0.5),
-                  ),
-                  const SizedBox(width: 4),
+                  _buildChip(category, Icons.category),
+                  const SizedBox(width: 8),
                   Expanded(
-                    child: Text(
-                      senderEmail,
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: theme.textTheme.bodySmall?.color?.withValues(alpha: 0.6),
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                    child: _buildChip(
+                      senderEmail.split('@').first,
+                      Icons.email,
                     ),
                   ),
-                  if (transactionDate != null) ...[
-                    const SizedBox(width: 8),
-                    Text(
-                      DateFormat('MMM dd, yyyy').format(transactionDate),
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: theme.textTheme.bodySmall?.color?.withValues(alpha: 0.6),
-                      ),
-                    ),
-                  ],
                 ],
               ),
+
+              // Badges row (Merge badge + Tracker badge)
               const SizedBox(height: 12),
-              // Action buttons
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  // Merge badge (if this email has SMS duplicates)
+                  if (emailInfo.hasDuplicates)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.purple.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: Colors.purple.withValues(alpha: 0.3),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.merge_type, size: 14, color: Colors.purple),
+                          const SizedBox(width: 6),
+                          Text(
+                            emailInfo.mergeBadgeText,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.purple,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  // Tracker badge
+                  TrackerBadge(
+                    trackerId: email.trackerId,
+                    confidence: email.trackerConfidence,
+                    userId: userId,
+                    compact: true,
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 12),
+              // Action buttons (matching SMS "Categorize" button style)
               Row(
                 children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () => _importToExpense(emailInfo, userId),
+                      icon: const Icon(Icons.add_circle_outline, size: 16),
+                      label: const Text('Import', style: TextStyle(fontSize: 12)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.tealAccent,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
                   Expanded(
                     child: OutlinedButton.icon(
-                      onPressed: () => _importToExpense(email, userId),
-                      icon: const Icon(Icons.add_circle_outline, size: 16),
-                      label: const Text('Import', style: TextStyle(fontSize: 13)),
+                      onPressed: () => _shareEmailExpense(emailInfo),
+                      icon: const Icon(Icons.group, size: 16),
+                      label: const Text('Share', style: TextStyle(fontSize: 12)),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppTheme.tealAccent,
                         side: const BorderSide(color: AppTheme.tealAccent),
-                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
                       ),
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 6),
                   Expanded(
                     child: OutlinedButton.icon(
-                      onPressed: () => _ignoreEmail(queueId, userId),
+                      onPressed: () => _ignoreEmail(emailInfo, userId),
                       icon: const Icon(Icons.block, size: 16),
-                      label: const Text('Ignore', style: TextStyle(fontSize: 13)),
+                      label: const Text('Ignore', style: TextStyle(fontSize: 12)),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: theme.textTheme.bodyMedium?.color,
                         side: BorderSide(color: theme.dividerTheme.color ?? Colors.grey),
-                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
                       ),
                     ),
                   ),
@@ -813,14 +1337,43 @@ class _EmailTransactionsScreenState extends State<EmailTransactionsScreen> {
     );
   }
 
+  // Helper method to build chips (matching SMS style)
+  Widget _buildChip(String label, IconData icon) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: theme.scaffoldBackgroundColor,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7)),
+          const SizedBox(width: 4),
+          Flexible(
+            child: Text(
+              label,
+              style: TextStyle(
+                color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
+                fontSize: 12,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showEmailDetail(
     BuildContext context,
     ThemeData theme,
-    Map<String, dynamic> email,
+    TransactionWithMergeInfo emailInfo,
     String userId,
   ) {
-    final rawText = email['rawText'] as String? ?? '';
-    final queueId = email['id'] as String;
+    final email = emailInfo.transaction;
+    final rawText = email.rawContent ?? '';
 
     showModalBottomSheet(
       context: context,
@@ -863,7 +1416,7 @@ class _EmailTransactionsScreenState extends State<EmailTransactionsScreen> {
                   child: ElevatedButton.icon(
                     onPressed: () {
                       Navigator.pop(context);
-                      _importToExpense(email, userId);
+                      _importToExpense(emailInfo, userId);
                     },
                     icon: const Icon(Icons.add_circle),
                     label: const Text('Import to Expense'),
@@ -878,7 +1431,7 @@ class _EmailTransactionsScreenState extends State<EmailTransactionsScreen> {
                 IconButton(
                   onPressed: () {
                     Navigator.pop(context);
-                    _ignoreEmail(queueId, userId);
+                    _ignoreEmail(emailInfo, userId);
                   },
                   icon: const Icon(Icons.block),
                   color: theme.textTheme.bodyMedium?.color,
@@ -892,23 +1445,43 @@ class _EmailTransactionsScreenState extends State<EmailTransactionsScreen> {
     );
   }
 
-  Future<void> _importToExpense(Map<String, dynamic> email, String userId) async {
+  Future<void> _importToExpense(TransactionWithMergeInfo emailInfo, String userId) async {
+    final transaction = emailInfo.transaction;
+
     try {
-      final queueId = email['id'] as String;
-      final success = await EmailTransactionParserService.importToExpense(
-        userId: userId,
-        queueId: queueId,
-        parsedData: email,
+      // Convert LocalTransactionModel to Firestore expense
+      await FirebaseFirestore.instance.collection('expenses').add({
+        'userId': userId,
+        'title': transaction.merchant,
+        'amount': transaction.amount,
+        'category': transaction.category,
+        'date': Timestamp.fromDate(transaction.transactionDate),
+        'notes': 'Imported from email: ${transaction.sourceIdentifier}',
+        'createdAt': FieldValue.serverTimestamp(),
+        'source': 'email',
+        'isDebit': transaction.isDebit,
+      });
+
+      // Update local transaction status to confirmed
+      final updatedTransaction = transaction.copyWith(
+        status: TransactionStatus.confirmed,
       );
+      await LocalDBService.instance.updateTransaction(updatedTransaction);
+
+      // Update duplicate transactions
+      if (emailInfo.hasDuplicates) {
+        await _updateDuplicateTransactions(transaction, userId);
+      }
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(success ? 'Imported to expenses' : 'Failed to import'),
-            backgroundColor: success ? Colors.green : AppTheme.errorColor,
-            duration: const Duration(seconds: 2),
+          const SnackBar(
+            content: Text('Imported to expenses'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
           ),
         );
+        setState(() {}); // Refresh the list
       }
     } catch (e) {
       if (mounted) {
@@ -922,22 +1495,75 @@ class _EmailTransactionsScreenState extends State<EmailTransactionsScreen> {
     }
   }
 
-  Future<void> _ignoreEmail(String queueId, String userId) async {
+  Future<void> _shareEmailExpense(TransactionWithMergeInfo emailInfo) async {
+    final email = emailInfo.transaction;
+    final userId = _auth.currentUser?.uid ?? '';
+
+    // Navigate to add expense screen with pre-filled data
+    final result = await Navigator.pushNamed(
+      context,
+      '/add_expense',
+      arguments: {
+        'prefill': true,
+        'title': email.merchant,
+        'amount': email.amount.toString(),
+        'category': email.category,
+        'notes': 'From email: ${email.sourceIdentifier ?? 'Unknown'}${email.notes != null ? '\n${email.notes}' : ''}',
+        'date': email.transactionDate,
+      },
+    );
+
+    // If expense was created, mark email as confirmed
+    if (result == true && mounted) {
+      try {
+        final updatedTransaction = email.copyWith(
+          status: TransactionStatus.confirmed,
+        );
+        await LocalDBService.instance.updateTransaction(updatedTransaction);
+
+        // Update duplicates
+        if (emailInfo.hasDuplicates) {
+          await _updateDuplicateTransactions(email, userId);
+        }
+
+        setState(() {}); // Refresh the list
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Shared successfully but failed to update status: $e'),
+              backgroundColor: AppTheme.orangeAccent,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _ignoreEmail(TransactionWithMergeInfo emailInfo, String userId) async {
+    final email = emailInfo.transaction;
     try {
-      final success = await EmailTransactionParserService.updateEmailStatus(
-        userId: userId,
-        queueId: queueId,
-        status: 'rejected',
+      // Update status to ignored
+      final updatedTransaction = email.copyWith(
+        status: TransactionStatus.ignored,
       );
+
+      await LocalDBService.instance.updateTransaction(updatedTransaction);
+
+      // Update duplicates
+      if (emailInfo.hasDuplicates) {
+        await _updateDuplicateTransactionsToStatus(email, userId, TransactionStatus.ignored);
+      }
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(success ? 'Email ignored' : 'Failed to ignore'),
-            backgroundColor: success ? Colors.green : AppTheme.errorColor,
-            duration: const Duration(seconds: 2),
+          const SnackBar(
+            content: Text('Email ignored'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
           ),
         );
+        setState(() {}); // Refresh the list
       }
     } catch (e) {
       if (mounted) {
@@ -949,5 +1575,607 @@ class _EmailTransactionsScreenState extends State<EmailTransactionsScreen> {
         );
       }
     }
+  }
+
+  /// Update duplicate transactions to a specific status (for ignore action)
+  Future<void> _updateDuplicateTransactionsToStatus(
+    LocalTransactionModel primaryTransaction,
+    String userId,
+    TransactionStatus newStatus,
+  ) async {
+    try {
+      final smsTransactions = await LocalDBService.instance.getTransactions(
+        userId: userId,
+        source: TransactionSource.sms,
+        status: TransactionStatus.pending,
+      );
+
+      final emailTransactions = await LocalDBService.instance.getTransactions(
+        userId: userId,
+        source: TransactionSource.email,
+        status: TransactionStatus.pending,
+      );
+
+      final allTransactions = [...smsTransactions, ...emailTransactions];
+
+      for (final other in allTransactions) {
+        if (other.id == primaryTransaction.id) continue;
+
+        if (_isDuplicate(primaryTransaction, other)) {
+          final updatedTransaction = other.copyWith(
+            status: newStatus,
+            updatedAt: DateTime.now(),
+          );
+
+          await LocalDBService.instance.updateTransaction(updatedTransaction);
+        }
+      }
+    } catch (e) {
+      print('Error updating duplicate transactions to status: $e');
+      // Don't throw - partial success is okay
+    }
+  }
+
+  // Duration picker
+  void _showDurationPicker() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Select Time Range'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: _durationOptions.map((days) {
+            return RadioListTile<int>(
+              title: Text('Last $days days'),
+              value: days,
+              groupValue: _selectedDays,
+              onChanged: (value) {
+                setState(() {
+                  _selectedDays = value!;
+                });
+                Navigator.pop(context);
+              },
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+
+  // Bulk selection methods
+  void _toggleSelectionMode() {
+    setState(() {
+      _selectionMode = !_selectionMode;
+      if (!_selectionMode) {
+        _selectedEmails.clear();
+      }
+    });
+  }
+
+  void _toggleEmailSelection(String emailId) {
+    setState(() {
+      if (_selectedEmails.contains(emailId)) {
+        _selectedEmails.remove(emailId);
+      } else {
+        _selectedEmails.add(emailId);
+      }
+    });
+  }
+
+  void _selectAllEmails(List<TransactionWithMergeInfo> emails) {
+    setState(() {
+      if (_selectedEmails.length == emails.length) {
+        _selectedEmails.clear();
+      } else {
+        _selectedEmails.clear();
+        _selectedEmails.addAll(emails.map((e) => e.transaction.id));
+      }
+    });
+  }
+
+  Future<void> _bulkImport(List<TransactionWithMergeInfo> allEmails) async {
+    final userId = _auth.currentUser?.uid;
+    if (userId == null) return;
+
+    final selectedList = allEmails.where((e) => _selectedEmails.contains(e.transaction.id)).toList();
+
+    if (selectedList.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No emails selected')),
+      );
+      return;
+    }
+
+    int successCount = 0;
+    for (final transactionInfo in selectedList) {
+      try {
+        await _importToExpense(transactionInfo, userId);
+        successCount++;
+      } catch (e) {
+        print('Error importing transaction ${transactionInfo.transaction.id}: $e');
+      }
+    }
+
+    setState(() {
+      _selectedEmails.clear();
+      _selectionMode = false;
+    });
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Imported $successCount of ${selectedList.length} emails'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    }
+  }
+
+  Future<void> _bulkIgnore(List<TransactionWithMergeInfo> allEmails, String userId) async {
+    if (_selectedEmails.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No emails selected')),
+      );
+      return;
+    }
+
+    final selectedList = allEmails.where((e) => _selectedEmails.contains(e.transaction.id)).toList();
+
+    int successCount = 0;
+    for (final transactionInfo in selectedList) {
+      try {
+        await _ignoreEmail(transactionInfo, userId);
+        successCount++;
+      } catch (e) {
+        print('Error ignoring transaction ${transactionInfo.transaction.id}: $e');
+      }
+    }
+
+    setState(() {
+      _selectedEmails.clear();
+      _selectionMode = false;
+    });
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Ignored $successCount emails'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    }
+  }
+
+  // Filter and sort emails
+  List<TransactionWithMergeInfo> _filterAndSortEmails(List<TransactionWithMergeInfo> emails) {
+    var filtered = List<TransactionWithMergeInfo>.from(emails);
+
+    // Apply search filter
+    final searchQuery = _searchQueryNotifier.value.toLowerCase();
+    if (searchQuery.isNotEmpty) {
+      filtered = filtered.where((emailInfo) {
+        final email = emailInfo.transaction;
+        final merchant = email.merchant.toLowerCase();
+        final subject = (email.rawContent?.split('\n').first ?? '').toLowerCase();
+        final sender = (email.sourceIdentifier ?? '').toLowerCase();
+        final amount = email.amount.toString();
+
+        return merchant.contains(searchQuery) ||
+               subject.contains(searchQuery) ||
+               sender.contains(searchQuery) ||
+               amount.contains(searchQuery);
+      }).toList();
+    }
+
+    // Apply sorting
+    filtered.sort((a, b) {
+      int comparison = 0;
+
+      switch (_sortBy) {
+        case 'date':
+          comparison = a.transaction.transactionDate.compareTo(b.transaction.transactionDate);
+          break;
+        case 'amount':
+          comparison = a.transaction.amount.compareTo(b.transaction.amount);
+          break;
+        case 'merchant':
+          comparison = a.transaction.merchant.compareTo(b.transaction.merchant);
+          break;
+      }
+
+      return _sortAscending ? comparison : -comparison;
+    });
+
+    return filtered;
+  }
+
+  // UI Builder Methods
+  Widget _buildFilterSortBar(List<TransactionWithMergeInfo> emails) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            // Duration filter chip
+            FilterChip(
+              label: Text('Last $_selectedDays days'),
+              avatar: const Icon(Icons.calendar_today, size: 16),
+              selected: true,
+              onSelected: (_) => _showDurationPicker(),
+              selectedColor: AppTheme.tealAccent.withValues(alpha: 0.2),
+              labelStyle: const TextStyle(fontSize: 12),
+            ),
+            const SizedBox(width: 8),
+
+            // Sort chip
+            FilterChip(
+              label: Text(_sortBy == 'date' ? 'Date' : _sortBy == 'amount' ? 'Amount' : 'Merchant'),
+              avatar: Icon(
+                _sortAscending ? Icons.arrow_upward : Icons.arrow_downward,
+                size: 16,
+              ),
+              selected: true,
+              onSelected: (_) => _showSortDialog(),
+              selectedColor: Colors.blue.withValues(alpha: 0.2),
+              labelStyle: const TextStyle(fontSize: 12),
+            ),
+            const SizedBox(width: 8),
+
+            // Selection mode chip
+            FilterChip(
+              label: const Text('Select'),
+              avatar: const Icon(Icons.checklist, size: 16),
+              selected: _selectionMode,
+              onSelected: (_) => _toggleSelectionMode(),
+              selectedColor: Colors.orange.withValues(alpha: 0.2),
+              labelStyle: const TextStyle(fontSize: 12),
+            ),
+            const SizedBox(width: 8),
+
+            // Count chip
+            Chip(
+              label: Text('${emails.length} emails'),
+              labelStyle: TextStyle(
+                fontSize: 12,
+                color: theme.textTheme.bodyMedium?.color,
+              ),
+              backgroundColor: theme.cardTheme.color,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showSortDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Sort By'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            RadioListTile<String>(
+              title: const Text('Date'),
+              value: 'date',
+              groupValue: _sortBy,
+              onChanged: (value) {
+                setState(() => _sortBy = value!);
+                Navigator.pop(context);
+              },
+            ),
+            RadioListTile<String>(
+              title: const Text('Amount'),
+              value: 'amount',
+              groupValue: _sortBy,
+              onChanged: (value) {
+                setState(() => _sortBy = value!);
+                Navigator.pop(context);
+              },
+            ),
+            RadioListTile<String>(
+              title: const Text('Merchant'),
+              value: 'merchant',
+              groupValue: _sortBy,
+              onChanged: (value) {
+                setState(() => _sortBy = value!);
+                Navigator.pop(context);
+              },
+            ),
+            const Divider(),
+            SwitchListTile(
+              title: const Text('Ascending'),
+              value: _sortAscending,
+              onChanged: (value) {
+                setState(() => _sortAscending = value);
+              },
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSelectionHeader(List<TransactionWithMergeInfo> emails) {
+    final theme = Theme.of(context);
+    final allSelected = _selectedEmails.length == emails.length && emails.isNotEmpty;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      color: AppTheme.tealAccent.withValues(alpha: 0.1),
+      child: Row(
+        children: [
+          Checkbox(
+            value: allSelected,
+            tristate: _selectedEmails.isNotEmpty && !allSelected,
+            onChanged: (_) => _selectAllEmails(emails),
+          ),
+          Text(
+            '${_selectedEmails.length} selected',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: theme.textTheme.bodyLarge?.color,
+            ),
+          ),
+          const Spacer(),
+          TextButton.icon(
+            onPressed: _toggleSelectionMode,
+            icon: const Icon(Icons.close, size: 16),
+            label: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSelectableCard(
+    TransactionWithMergeInfo emailInfo,
+    ThemeData theme,
+    String userId,
+  ) {
+    final email = emailInfo.transaction;
+    final queueId = email.id;
+    final isSelected = _selectedEmails.contains(queueId);
+
+    return Card(
+      color: theme.cardTheme.color,
+      margin: const EdgeInsets.only(bottom: 12),
+      elevation: isSelected ? 4 : 2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: isSelected
+            ? const BorderSide(color: AppTheme.tealAccent, width: 2)
+            : BorderSide.none,
+      ),
+      child: InkWell(
+        onTap: () => _toggleEmailSelection(queueId),
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Checkbox(
+                value: isSelected,
+                onChanged: (_) => _toggleEmailSelection(queueId),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildEmailCardContent(email, theme),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmailCardContent(LocalTransactionModel email, ThemeData theme) {
+    final amount = email.amount;
+    final merchant = email.merchant;
+    final transactionDate = email.transactionDate;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Expanded(
+              child: Text(
+                merchant,
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                  color: theme.textTheme.bodyLarge?.color,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            Text(
+              '₹${amount.toStringAsFixed(2)}',
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: AppTheme.tealAccent,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          transactionDate != null
+              ? DateFormat('dd MMM yyyy').format(transactionDate)
+              : 'Unknown date',
+          style: TextStyle(
+            fontSize: 12,
+            color: theme.textTheme.bodySmall?.color?.withValues(alpha: 0.6),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBulkActionBar(List<TransactionWithMergeInfo> allEmails) {
+    final theme = Theme.of(context);
+    final userId = _auth.currentUser?.uid ?? '';
+
+    return Positioned(
+      bottom: 0,
+      left: 0,
+      right: 0,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: theme.scaffoldBackgroundColor,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.1),
+              blurRadius: 8,
+              offset: const Offset(0, -2),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: () => _bulkImport(allEmails),
+                icon: const Icon(Icons.add_circle, size: 20),
+                label: Text('Import (${_selectedEmails.length})'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.tealAccent,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: () => _bulkIgnore(allEmails, userId),
+                icon: const Icon(Icons.block, size: 20),
+                label: const Text('Ignore'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: theme.textTheme.bodyMedium?.color,
+                  side: BorderSide(color: theme.dividerTheme.color ?? Colors.grey),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Update all duplicate copies of a transaction when one is imported/confirmed
+  Future<void> _updateDuplicateTransactions(
+    LocalTransactionModel primaryTransaction,
+    String userId,
+  ) async {
+    try {
+      // Load all pending transactions from both sources
+      final smsTransactions = await LocalDBService.instance.getTransactions(
+        userId: userId,
+        source: TransactionSource.sms,
+        status: TransactionStatus.pending,
+      );
+
+      final emailTransactions = await LocalDBService.instance.getTransactions(
+        userId: userId,
+        source: TransactionSource.email,
+        status: TransactionStatus.pending,
+      );
+
+      final allTransactions = [...smsTransactions, ...emailTransactions];
+
+      // Find all duplicates of the primary transaction
+      for (final other in allTransactions) {
+        // Skip the primary transaction itself
+        if (other.id == primaryTransaction.id) continue;
+
+        // Check if this is a duplicate
+        if (_isDuplicate(primaryTransaction, other)) {
+          // Update the duplicate to confirmed status
+          final updatedTransaction = other.copyWith(
+            status: TransactionStatus.confirmed,
+            updatedAt: DateTime.now(),
+          );
+
+          await LocalDBService.instance.updateTransaction(updatedTransaction);
+        }
+      }
+    } catch (e) {
+      print('Error updating duplicate transactions: $e');
+      // Don't throw - partial success is okay
+    }
+  }
+
+  /// Check if two transactions are duplicates (same logic as TransactionDisplayService)
+  bool _isDuplicate(LocalTransactionModel t1, LocalTransactionModel t2) {
+    // Same source - not duplicate
+    if (t1.source == t2.source) return false;
+
+    // Check by transaction ID (exact match)
+    if (t1.transactionId != null &&
+        t2.transactionId != null &&
+        t1.transactionId!.isNotEmpty &&
+        t2.transactionId!.isNotEmpty &&
+        t1.transactionId == t2.transactionId) {
+      return true;
+    }
+
+    // Fuzzy match: amount + date + merchant
+    final amountMatch = (t1.amount - t2.amount).abs() < 0.01;
+    final dateMatch = t1.transactionDate
+            .difference(t2.transactionDate)
+            .abs()
+            .inHours < 24;
+    final merchantMatch = _isMerchantSimilar(t1.merchant, t2.merchant);
+
+    return amountMatch && dateMatch && merchantMatch;
+  }
+
+  /// Check if two merchant names are similar (same logic as TransactionDisplayService)
+  bool _isMerchantSimilar(String merchant1, String merchant2) {
+    final clean1 = _cleanMerchantName(merchant1);
+    final clean2 = _cleanMerchantName(merchant2);
+
+    if (clean1 == clean2) return true;
+    if (clean1.contains(clean2) || clean2.contains(clean1)) return true;
+
+    final words1 = clean1.split(' ').where((w) => w.isNotEmpty).toSet();
+    final words2 = clean2.split(' ').where((w) => w.isNotEmpty).toSet();
+    if (words1.isEmpty || words2.isEmpty) return false;
+
+    final intersection = words1.intersection(words2).length;
+    final union = words1.union(words2).length;
+    final similarity = intersection / union;
+
+    return similarity >= 0.6;
+  }
+
+  /// Clean merchant name for comparison
+  String _cleanMerchantName(String merchant) {
+    return merchant
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9\s]'), '')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
   }
 }
