@@ -1,11 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:spendpal/services/portfolio_service.dart';
 import 'package:spendpal/services/valuation_service.dart';
-import 'package:spendpal/services/account_tracker_service.dart';
-import 'package:spendpal/models/account_tracker_model.dart';
-import 'package:spendpal/config/investment_platform_registry.dart';
+import 'package:spendpal/utils/currency_utils.dart';
 
 class InvestmentsScreen extends StatefulWidget {
   const InvestmentsScreen({Key? key}) : super(key: key);
@@ -53,6 +50,13 @@ class _InvestmentsScreenState extends State<InvestmentsScreen> with SingleTicker
       backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text('Investments'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.add),
+            tooltip: 'Add Investment',
+            onPressed: () => _showAddOptionsSheet(context),
+          ),
+        ],
         bottom: TabBar(
           controller: _tabController,
           isScrollable: true,
@@ -66,29 +70,6 @@ class _InvestmentsScreenState extends State<InvestmentsScreen> with SingleTicker
             Tab(text: 'Gold'),
           ],
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.sync),
-            tooltip: 'Manage Trackers',
-            onPressed: () {
-              _showTrackerManagement(context);
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.sms),
-            tooltip: 'Review Investment SMS',
-            onPressed: () {
-              Navigator.pushNamed(context, '/investment_sms_review');
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.add),
-            onPressed: () {
-              // Navigate to add asset screen
-              Navigator.pushNamed(context, '/add_investment_transaction');
-            },
-          ),
-        ],
       ),
       body: FutureBuilder<Map<String, dynamic>>(
         future: _loadPortfolioData(),
@@ -112,7 +93,6 @@ class _InvestmentsScreenState extends State<InvestmentsScreen> with SingleTicker
 
           final data = snapshot.data ?? {};
           final summary = data['summary'] as Map<String, dynamic>? ?? {};
-          final allocation = data['allocation'] as Map<String, double>? ?? {};
           final portfolioItems = summary['portfolioItems'] as List<Map<String, dynamic>>? ?? [];
 
           final totalInvested = summary['totalInvested'] as double? ?? 0.0;
@@ -154,14 +134,6 @@ class _InvestmentsScreenState extends State<InvestmentsScreen> with SingleTicker
             ),
           );
         },
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          // Show bottom sheet to choose: Add Asset or Add Transaction
-          _showAddOptionsSheet(context);
-        },
-        icon: const Icon(Icons.add),
-        label: const Text('Add'),
       ),
     );
   }
@@ -235,7 +207,7 @@ class _InvestmentsScreenState extends State<InvestmentsScreen> with SingleTicker
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    '₹${_formatCompact(invested)}',
+                    '${context.currencySymbol}${_formatCompact(invested)}',
                     style: const TextStyle(
                       color: Color(0xFFF8F8F8),
                       fontSize: 20,
@@ -256,7 +228,7 @@ class _InvestmentsScreenState extends State<InvestmentsScreen> with SingleTicker
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    '₹${_formatCompact(current)}',
+                    '${context.currencySymbol}${_formatCompact(current)}',
                     style: const TextStyle(
                       color: Color(0xFFF8F8F8),
                       fontSize: 20,
@@ -285,7 +257,7 @@ class _InvestmentsScreenState extends State<InvestmentsScreen> with SingleTicker
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
-                    '${pl >= 0 ? '+' : ''}₹${pl.toStringAsFixed(2)}',
+                    '${pl >= 0 ? '+' : ''}${context.formatCurrency(pl.abs())}',
                     style: const TextStyle(
                       color: Color(0xFFF8F8F8),
                       fontSize: 24,
@@ -365,8 +337,6 @@ class _InvestmentsScreenState extends State<InvestmentsScreen> with SingleTicker
   Widget _buildAssetCard(BuildContext context, ThemeData theme, Map<String, dynamic> item) {
     final name = item['name'] as String;
     final assetType = item['assetType'] as String;
-    final quantity = item['quantity'] as double;
-    final currentPrice = item['currentPrice'] as double?;
     final investedAmount = item['investedAmount'] as double;
     final currentValue = item['currentValue'] as double;
     final pl = item['unrealizedPL'] as double;
@@ -453,7 +423,7 @@ class _InvestmentsScreenState extends State<InvestmentsScreen> with SingleTicker
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        '₹${investedAmount.toStringAsFixed(2)}',
+                        context.formatCurrency(investedAmount),
                         style: TextStyle(
                           color: theme.textTheme.bodyMedium?.color,
                           fontSize: 14,
@@ -474,7 +444,7 @@ class _InvestmentsScreenState extends State<InvestmentsScreen> with SingleTicker
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        '₹${currentValue.toStringAsFixed(2)}',
+                        context.formatCurrency(currentValue),
                         style: TextStyle(
                           color: theme.textTheme.bodyMedium?.color,
                           fontSize: 14,
@@ -495,7 +465,7 @@ class _InvestmentsScreenState extends State<InvestmentsScreen> with SingleTicker
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        '${pl >= 0 ? '+' : ''}₹${pl.toStringAsFixed(2)}',
+                        '${pl >= 0 ? '+' : '-'}${context.formatCurrency(pl.abs())}',
                         style: TextStyle(
                           color: plColor,
                           fontSize: 14,
@@ -527,8 +497,7 @@ class _InvestmentsScreenState extends State<InvestmentsScreen> with SingleTicker
               subtitle: const Text('Create a new investment asset'),
               onTap: () {
                 Navigator.pop(context);
-                // Navigate to add transaction screen (which supports creating new assets)
-                Navigator.pushNamed(context, '/add_investment_transaction');
+                Navigator.pushNamed(context, '/add_asset');
               },
             ),
             ListTile(
@@ -589,255 +558,6 @@ class _InvestmentsScreenState extends State<InvestmentsScreen> with SingleTicker
         return 'Gold';
       default:
         return assetType;
-    }
-  }
-
-  void _showTrackerManagement(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) => DraggableScrollableSheet(
-        initialChildSize: 0.7,
-        minChildSize: 0.5,
-        maxChildSize: 0.95,
-        expand: false,
-        builder: (context, scrollController) {
-          final currentUser = FirebaseAuth.instance.currentUser;
-          if (currentUser == null) return const SizedBox();
-
-          return Column(
-            children: [
-              // Header
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).primaryColor.withValues(alpha: 0.1),
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.sync, color: Theme.of(context).primaryColor),
-                    const SizedBox(width: 12),
-                    const Text(
-                      'Investment Trackers',
-                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                    ),
-                    const Spacer(),
-                    IconButton(
-                      icon: const Icon(Icons.close),
-                      onPressed: () => Navigator.pop(context),
-                    ),
-                  ],
-                ),
-              ),
-
-              // Existing Trackers Section
-              Expanded(
-                child: StreamBuilder<QuerySnapshot>(
-                  stream: FirebaseFirestore.instance
-                      .collection('accountTrackers')
-                      .where('userId', isEqualTo: currentUser.uid)
-                      .where('type', isEqualTo: 'investment')
-                      .snapshots(),
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
-
-                    final trackers = snapshot.data?.docs ?? [];
-
-                    return ListView(
-                      controller: scrollController,
-                      padding: const EdgeInsets.all(16),
-                      children: [
-                        // Existing trackers list
-                        if (trackers.isNotEmpty) ...[
-                          const Text(
-                            'Active Trackers',
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                          ),
-                          const SizedBox(height: 12),
-                          ...trackers.map((doc) {
-                            final tracker = AccountTrackerModel.fromFirestore(doc);
-                            final platform = getPlatformById(tracker.name.toLowerCase().replaceAll(' ', '_'));
-
-                            return Card(
-                              margin: const EdgeInsets.only(bottom: 8),
-                              child: ListTile(
-                                leading: CircleAvatar(
-                                  backgroundColor: platform?.color ?? Colors.blue,
-                                  child: Icon(platform?.icon ?? Icons.account_balance, color: Colors.white),
-                                ),
-                                title: Text(tracker.name),
-                                subtitle: Text(
-                                  '${tracker.emailsFetched} emails fetched',
-                                  style: TextStyle(color: Colors.grey[600]),
-                                ),
-                                trailing: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Switch(
-                                      value: tracker.isActive,
-                                      onChanged: (value) async {
-                                        await FirebaseFirestore.instance
-                                            .collection('accountTrackers')
-                                            .doc(tracker.id)
-                                            .update({'isActive': value});
-                                      },
-                                    ),
-                                    IconButton(
-                                      icon: const Icon(Icons.delete, color: Colors.red),
-                                      onPressed: () async {
-                                        final confirm = await showDialog<bool>(
-                                          context: context,
-                                          builder: (context) => AlertDialog(
-                                            title: const Text('Delete Tracker?'),
-                                            content: Text('Remove tracker for ${tracker.name}?'),
-                                            actions: [
-                                              TextButton(
-                                                onPressed: () => Navigator.pop(context, false),
-                                                child: const Text('Cancel'),
-                                              ),
-                                              TextButton(
-                                                onPressed: () => Navigator.pop(context, true),
-                                                child: const Text('Delete', style: TextStyle(color: Colors.red)),
-                                              ),
-                                            ],
-                                          ),
-                                        );
-
-                                        if (confirm == true) {
-                                          await FirebaseFirestore.instance
-                                              .collection('accountTrackers')
-                                              .doc(tracker.id)
-                                              .delete();
-                                        }
-                                      },
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            );
-                          }),
-                          const SizedBox(height: 24),
-                        ],
-
-                        // Add new tracker section
-                        const Text(
-                          'Add New Tracker',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                        ),
-                        const SizedBox(height: 12),
-                        const Text(
-                          'Select a platform to automatically import investment transactions from emails:',
-                          style: TextStyle(color: Colors.grey),
-                        ),
-                        const SizedBox(height: 16),
-
-                        // Platform selection cards
-                        ...investmentPlatforms.map((platform) {
-                          // Check if tracker already exists
-                          final trackerExists = trackers.any((doc) {
-                            final tracker = AccountTrackerModel.fromFirestore(doc);
-                            return tracker.name.toLowerCase() == platform.name.toLowerCase();
-                          });
-
-                          return Card(
-                            margin: const EdgeInsets.only(bottom: 8),
-                            child: ListTile(
-                              enabled: !trackerExists,
-                              leading: CircleAvatar(
-                                backgroundColor: platform.color,
-                                child: Icon(platform.icon, color: Colors.white),
-                              ),
-                              title: Text(platform.name),
-                              subtitle: Text(
-                                platform.supportedAssetTypes.join(', '),
-                                style: TextStyle(color: Colors.grey[600]),
-                              ),
-                              trailing: trackerExists
-                                  ? const Icon(Icons.check_circle, color: Colors.green)
-                                  : const Icon(Icons.add_circle_outline),
-                              onTap: trackerExists
-                                  ? null
-                                  : () => _createInvestmentTracker(context, platform, currentUser.uid),
-                            ),
-                          );
-                        }),
-                      ],
-                    );
-                  },
-                ),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-
-  Future<void> _createInvestmentTracker(
-    BuildContext context,
-    InvestmentPlatform platform,
-    String userId,
-  ) async {
-    try {
-      // Map platform ID to TrackerCategory enum
-      final category = _getTrackerCategory(platform.id);
-
-      final tracker = AccountTrackerModel(
-        id: FirebaseFirestore.instance.collection('accountTrackers').doc().id,
-        userId: userId,
-        name: platform.name,
-        type: TrackerType.investment,
-        category: category,
-        emailDomains: [platform.emailDomain],
-        colorHex: '#${platform.color.toARGB32().toRadixString(16).substring(2)}',
-        isActive: true,
-        emailsFetched: 0,
-        createdAt: DateTime.now(),
-      );
-
-      await FirebaseFirestore.instance
-          .collection('accountTrackers')
-          .doc(tracker.id)
-          .set(tracker.toMap());
-
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('✓ ${platform.name} tracker created'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error creating tracker: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
-  TrackerCategory _getTrackerCategory(String platformId) {
-    switch (platformId) {
-      case 'zerodha':
-        return TrackerCategory.zerodha;
-      case 'groww':
-        return TrackerCategory.groww;
-      case 'angelone':
-        return TrackerCategory.angelOne;
-      case 'upstox':
-        return TrackerCategory.upstox;
-      case '5paisa':
-        return TrackerCategory.paisa5;
-      default:
-        // For platforms not in enum, use a generic one
-        return TrackerCategory.zerodha; // Default fallback
     }
   }
 }

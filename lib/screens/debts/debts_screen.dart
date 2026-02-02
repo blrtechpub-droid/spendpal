@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:spendpal/models/simplified_debt_model.dart';
 import 'package:spendpal/services/debt_simplification_service.dart';
 import 'package:spendpal/widgets/upi_settle_dialog.dart';
+import 'package:spendpal/utils/currency_utils.dart';
 
 /// Screen showing simplified debts with Splitwise-style UX
 /// Shows who owes whom and how much in a clear, actionable format
@@ -149,8 +150,8 @@ class _DebtsScreenState extends State<DebtsScreen> with SingleTickerProviderStat
             const SizedBox(height: 8),
             Text(
               summary.isDebtor
-                  ? 'You owe ₹${summary.totalOwed.toStringAsFixed(2)}'
-                  : 'You are owed ₹${summary.totalOwedToUser.toStringAsFixed(2)}',
+                  ? 'You owe ${context.formatCurrency(summary.totalOwed)}'
+                  : 'You are owed ${context.formatCurrency(summary.totalOwedToUser)}',
               style: const TextStyle(
                 color: Colors.white70,
                 fontSize: 16,
@@ -277,7 +278,7 @@ class _DebtsScreenState extends State<DebtsScreen> with SingleTickerProviderStat
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
-                    '₹${debt.amount.toStringAsFixed(2)}',
+                    context.formatCurrency(debt.amount),
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,

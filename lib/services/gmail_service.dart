@@ -3,6 +3,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:googleapis/gmail/v1.dart' as gmail;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:extension_google_sign_in_as_googleapis_auth/extension_google_sign_in_as_googleapis_auth.dart';
+import 'account_tracker_service.dart';
 
 /// Service for Gmail API integration
 /// Handles authentication, email fetching, and parsing
@@ -211,6 +212,123 @@ class GmailService {
     } catch (e) {
       lastSearchError = e.toString();
       lastSearchResultCount = 0;
+      return [];
+    }
+  }
+
+  /// Build Gmail search query from user's active trackers
+  ///
+  /// This enables targeted email searches based on configured accounts
+  static Future<String> buildSearchQueryFromTrackers({
+    required String userId,
+    DateTime? after,
+    DateTime? before,
+  }) async {
+    // Fetch user's active trackers
+    final trackers = await AccountTrackerService.getActiveTrackers(userId);
+
+    if (trackers.isEmpty) {
+      // No trackers configured
+      return '';
+    }
+
+    // Collect all email domains from trackers
+    final domains = <String>{};
+    for (final tracker in trackers) {
+      domains.addAll(tracker.emailDomains);
+    }
+
+    if (domains.isEmpty) return '';
+
+    final queryParts = <String>[];
+
+    // Build from: clause
+    queryParts.add('from:(${domains.join(' OR ')})');
+
+    // Add date filters
+    if (after != null) {
+      final dateStr = '${after.year}/${after.month.toString().padLeft(2, '0')}/${after.day.toString().padLeft(2, '0')}';
+      queryParts.add('after:$dateStr');
+    }
+
+    if (before != null) {
+      final dateStr = '${before.year}/${before.month.toString().padLeft(2, '0')}/${before.day.toString().padLeft(2, '0')}';
+      queryParts.add('before:$dateStr');
+    }
+
+    return queryParts.join(' ');
+  }
+
+  /// Search emails using tracker-based query
+  ///
+  /// Only searches emails from user's configured trackers
+  static Future<List<gmail.Message>> searchTransactionEmailsFromTrackers({
+    required String userId,
+    DateTime? after,
+    DateTime? before,
+    int maxResults = 100,
+  }) async {
+    final api = await _getGmailClient();
+    if (api == null) {
+      lastSearchError = 'Failed to get Gmail client';
+      return [];
+    }
+
+    try {
+      // Get active trackers
+      final trackers = await AccountTrackerService.getActiveTrackers(userId);
+
+      if (trackers.isEmpty) {
+        lastSearchError = 'No trackers configured';
+        return [];
+      }
+
+      // Collect domains
+      final domains = <String>{};
+      for (final tracker in trackers) {
+        domains.addAll(tracker.emailDomains);
+      }
+
+      if (domains.isEmpty) {
+        lastSearchError = 'No email domains found in trackers';
+        return [];
+      }
+
+      // Build query
+      final queryParts = <String>[];
+      queryParts.add('from:(${domains.join(' OR ')})');
+
+      if (after != null) {
+        final dateStr = '${after.year}/${after.month.toString().padLeft(2, '0')}/${after.day.toString().padLeft(2, '0')}';
+        queryParts.add('after:$dateStr');
+      }
+
+      if (before != null) {
+        final dateStr = '${before.year}/${before.month.toString().padLeft(2, '0')}/${before.day.toString().padLeft(2, '0')}';
+        queryParts.add('before:$dateStr');
+      }
+
+      final query = queryParts.join(' ');
+      lastSearchQuery = query;
+      lastSearchError = null;
+
+      debugPrint('🔍 Tracker-based search query: $query');
+      debugPrint('📧 Searching ${trackers.length} configured trackers');
+
+      final response = await api.users.messages.list(
+        'me',
+        q: query,
+        maxResults: maxResults,
+      );
+
+      lastSearchResultCount = response.messages?.length ?? 0;
+      debugPrint('✅ Found ${lastSearchResultCount} emails from trackers');
+
+      return response.messages ?? [];
+    } catch (e) {
+      lastSearchError = e.toString();
+      lastSearchResultCount = 0;
+      debugPrint('❌ Error searching emails from trackers: $e');
       return [];
     }
   }

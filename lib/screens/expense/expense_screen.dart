@@ -3,6 +3,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import 'package:spendpal/theme/app_theme.dart';
+import 'package:spendpal/services/budget_service.dart';
+import 'package:spendpal/utils/currency_utils.dart';
 
 class AddExpenseScreen extends StatefulWidget {
   final String? preSelectedGroupId;
@@ -42,10 +44,14 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
   String _splitMethod = 'equal'; // 'equal', 'unequal', 'percentage', 'shares'
   Map<String, double> _customSplits = {}; // uid -> amount/percentage/shares
   List<String> _groupMembers = []; // Current group members for display
+  Map<String, String> _groupMemberDetails = {}; // uid -> name mapping
 
   // SMS expense tracking
   String? _smsExpenseId; // Track which SMS expense this came from
   bool _argumentsProcessed = false; // Flag to prevent duplicate processing
+
+  // Budget warnings
+  List<String> _budgetWarnings = [];
 
   final List<String> categories = [
     'Food',
@@ -66,6 +72,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
   @override
   void initState() {
     super.initState();
+    // Don't hardcode paidBy - let user select or default to current user
     _paidBy = FirebaseAuth.instance.currentUser?.uid;
 
     // If split type is pre-selected (from swipe action), use it
@@ -316,6 +323,84 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
     }
   }
 
+  // Get participant count for header
+  int _getParticipantCount() {
+    if (_splitType == 'personal') return 1;
+    if (_splitType == 'friends') return _selectedFriends.length + 1; // +1 for current user
+    if (_splitType == 'group') return _groupMembers.length;
+    return 1;
+  }
+
+  // Get split method text for compact display
+  String _getSplitMethodText() {
+    final payers = _getPossiblePayers();
+    final payer = payers.firstWhere(
+      (p) => p['uid'] == _paidBy,
+      orElse: () => {'name': 'You'},
+    );
+    final payerName = payer['name'] as String;
+
+    if (_splitType == 'personal') {
+      return 'Personal expense';
+    }
+
+    String splitText = '';
+    if (_splitMethod == 'equal') {
+      splitText = 'split equally';
+    } else if (_splitMethod == 'unequal') {
+      splitText = 'split by exact amounts';
+    } else if (_splitMethod == 'percentage') {
+      splitText = 'split by percentages';
+    } else if (_splitMethod == 'shares') {
+      splitText = 'split by shares';
+    }
+
+    return 'Paid by $payerName and $splitText';
+  }
+
+  // Get list of possible payers based on split type
+  List<Map<String, dynamic>> _getPossiblePayers() {
+    final currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
+    List<Map<String, dynamic>> payers = [];
+
+    // Always include current user
+    payers.add({
+      'uid': currentUserId,
+      'name': 'You',
+      'isCurrentUser': true,
+    });
+
+    if (_splitType == 'friends' && _selectedFriends.isNotEmpty) {
+      // Add selected friends
+      for (final friend in _friends) {
+        final friendId = friend['uid'] as String;
+        if (_selectedFriends.contains(friendId)) {
+          final nickname = friend['nickname'] as String?;
+          final name = friend['name'] as String? ?? 'Unknown';
+          final displayName = nickname != null && nickname.isNotEmpty ? nickname : name;
+          payers.add({
+            'uid': friendId,
+            'name': displayName,
+            'isCurrentUser': false,
+          });
+        }
+      }
+    } else if (_splitType == 'group' && _groupMembers.isNotEmpty) {
+      // Add group members with actual names from _groupMemberDetails
+      for (final memberId in _groupMembers) {
+        if (memberId != currentUserId) {
+          payers.add({
+            'uid': memberId,
+            'name': _groupMemberDetails[memberId] ?? 'Unknown',
+            'isCurrentUser': false,
+          });
+        }
+      }
+    }
+
+    return payers;
+  }
+
   Future<void> _loadGroupMembers(String groupId) async {
     try {
       final groupDoc = await FirebaseFirestore.instance
@@ -323,15 +408,76 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
           .doc(groupId)
           .get();
       if (groupDoc.exists) {
-        final members = List<String>.from(groupDoc.data()?['members'] ?? []);
+        final memberIds = List<String>.from(groupDoc.data()?['members'] ?? []);
+
+        // Fetch user details for each member
+        _groupMemberDetails.clear();
+        for (String uid in memberIds) {
+          try {
+            final userDoc = await FirebaseFirestore.instance
+                .collection('users')
+                .doc(uid)
+                .get();
+            if (userDoc.exists) {
+              final userData = userDoc.data();
+              _groupMemberDetails[uid] = userData?['name'] ?? 'Unknown';
+            } else {
+              _groupMemberDetails[uid] = 'Unknown';
+            }
+          } catch (e) {
+            _groupMemberDetails[uid] = 'Unknown';
+          }
+        }
+
         setState(() {
-          _groupMembers = members;
+          _groupMembers = memberIds;
           // Reset custom splits when group changes
           _customSplits.clear();
         });
       }
     } catch (e) {
       print('Error loading group members: $e');
+    }
+  }
+
+  Future<void> _checkBudgetWarnings() async {
+    final amountText = _amountController.text.trim();
+    if (amountText.isEmpty || _category == null) {
+      setState(() => _budgetWarnings = []);
+      return;
+    }
+
+    final expenseAmount = double.tryParse(amountText);
+    if (expenseAmount == null || expenseAmount <= 0) {
+      setState(() => _budgetWarnings = []);
+      return;
+    }
+
+    final userId = FirebaseAuth.instance.currentUser?.uid;
+    if (userId == null) {
+      setState(() => _budgetWarnings = []);
+      return;
+    }
+
+    // Only check budget for personal expenses (not shared expenses)
+    if (_splitType != 'personal') {
+      setState(() => _budgetWarnings = []);
+      return;
+    }
+
+    try {
+      final warnings = await BudgetService.checkBudgetImpact(
+        userId: userId,
+        expenseAmount: expenseAmount,
+        category: _category!,
+      );
+
+      setState(() {
+        _budgetWarnings = warnings['warnings'] as List<String>;
+      });
+    } catch (e) {
+      // Silently fail - budget warnings are not critical
+      setState(() => _budgetWarnings = []);
     }
   }
 
@@ -389,7 +535,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
         final sum = _customSplits.values.fold(0.0, (sum, val) => sum + val);
         if ((sum - totalAmount).abs() > 0.01) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Split amounts must total ₹${totalAmount.toStringAsFixed(2)} (current: ₹${sum.toStringAsFixed(2)})')),
+            SnackBar(content: Text('Split amounts must total ${context.formatCurrency(totalAmount)} (current: ${context.formatCurrency(sum)})')),
           );
           return;
         }
@@ -625,7 +771,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                       children: [
                         Text(name),
                         Text(
-                          '₹${entry.value.toStringAsFixed(2)}',
+                          context.formatCurrency(entry.value),
                           style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
                       ],
@@ -640,7 +786,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
               children: [
                 const Text('Total', style: TextStyle(fontWeight: FontWeight.bold)),
                 Text(
-                  '₹${totalAmount.toStringAsFixed(2)}',
+                  context.formatCurrency(totalAmount),
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
               ],
@@ -651,6 +797,165 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
     );
   }
 
+  // Show split options dialog (Paid by, Split type, Split method)
+  Future<void> _showSplitOptionsDialog() async {
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) {
+          return Container(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Split Options',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 16),
+                // Paid by selector
+                if (_splitType != 'personal') ...[
+                  const Text('Paid by:', style: TextStyle(fontWeight: FontWeight.w500)),
+                  const SizedBox(height: 8),
+                  ..._getPossiblePayers().map((payer) {
+                    final uid = payer['uid'] as String;
+                    final name = payer['name'] as String;
+                    return RadioListTile<String>(
+                      title: Text(name),
+                      value: uid,
+                      groupValue: _paidBy,
+                      onChanged: (value) {
+                        setState(() => _paidBy = value);
+                        setModalState(() {});
+                      },
+                    );
+                  }),
+                  const Divider(),
+                ],
+                // Split type
+                const Text('Split type:', style: TextStyle(fontWeight: FontWeight.w500)),
+                const SizedBox(height: 8),
+                RadioListTile<String>(
+                  title: const Text('Personal'),
+                  value: 'personal',
+                  groupValue: _splitType,
+                  onChanged: (value) {
+                    setState(() {
+                      _splitType = value!;
+                      _selectedGroupId = null;
+                      _selectedFriends.clear();
+                    });
+                    setModalState(() {});
+                  },
+                ),
+                RadioListTile<String>(
+                  title: const Text('Friends'),
+                  value: 'friends',
+                  groupValue: _splitType,
+                  onChanged: (value) {
+                    setState(() {
+                      _splitType = value!;
+                      _selectedGroupId = null;
+                    });
+                    setModalState(() {});
+                  },
+                ),
+                RadioListTile<String>(
+                  title: const Text('Group'),
+                  value: 'group',
+                  groupValue: _splitType,
+                  onChanged: (value) {
+                    setState(() {
+                      _splitType = value!;
+                      _selectedFriends.clear();
+                    });
+                    setModalState(() {});
+                  },
+                ),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: AppTheme.primaryButtonStyle,
+                  child: const Text('Done'),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  // Show category picker dialog
+  Future<void> _showCategoryPicker() async {
+    final selected = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Select Category'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: categories.map((cat) {
+                return ListTile(
+                  title: Text(cat),
+                  leading: Icon(
+                    _category == cat ? Icons.check_circle : Icons.circle_outlined,
+                    color: _category == cat ? AppTheme.tealAccent : null,
+                  ),
+                  onTap: () => Navigator.pop(context, cat),
+                );
+              }).toList(),
+            ),
+          ),
+        );
+      },
+    );
+
+    if (selected != null) {
+      setState(() => _category = selected);
+      _checkBudgetWarnings();
+    }
+  }
+
+  // Show notes dialog
+  Future<void> _showNotesDialog() async {
+    final controller = TextEditingController(text: _notesController.text);
+    await showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Add Note'),
+          content: TextField(
+            controller: controller,
+            decoration: const InputDecoration(
+              hintText: 'Enter note...',
+              border: OutlineInputBorder(),
+            ),
+            maxLines: 3,
+            autofocus: true,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                setState(() => _notesController.text = controller.text);
+                Navigator.pop(context);
+              },
+              style: AppTheme.primaryButtonStyle,
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -658,6 +963,13 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.expenseId != null ? 'Edit Expense' : 'Add Expense'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.check),
+            onPressed: _saveExpense,
+            tooltip: 'Save',
+          ),
+        ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -666,86 +978,249 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // "With you and: +X" header (Splitwise-style)
+                  if (_splitType != 'personal') ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                      decoration: BoxDecoration(
+                        color: theme.cardTheme.color?.withOpacity(0.5),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: theme.dividerColor.withOpacity(0.2),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Text(
+                            'With you and: ',
+                            style: TextStyle(
+                              color: theme.textTheme.bodyMedium?.color,
+                              fontSize: 14,
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: AppTheme.tealAccent.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              '+${_getParticipantCount() - 1}',
+                              style: const TextStyle(
+                                color: AppTheme.tealAccent,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  // Description field with icon (compact)
                   TextField(
                     controller: _titleController,
-                    style: TextStyle(color: theme.textTheme.bodyLarge?.color),
-                    decoration: const InputDecoration(labelText: 'Expense Title'),
+                    style: TextStyle(
+                      color: theme.textTheme.bodyLarge?.color,
+                      fontSize: 16,
+                    ),
+                    decoration: InputDecoration(
+                      hintText: 'Enter a description',
+                      hintStyle: TextStyle(
+                        color: theme.textTheme.bodyMedium?.color?.withOpacity(0.5),
+                      ),
+                      prefixIcon: const Icon(Icons.receipt_long, size: 20),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                    ),
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 12),
+                  // Amount field with currency icon (compact)
                   TextField(
                     controller: _amountController,
                     keyboardType: TextInputType.number,
-                    style: TextStyle(color: theme.textTheme.bodyLarge?.color),
-                    decoration: const InputDecoration(labelText: 'Amount'),
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      const Text('Date: '),
-                      Text(DateFormat('yyyy-MM-dd').format(_selectedDate)),
-                      const Spacer(),
-                      TextButton(onPressed: _pickDate, child: const Text('Select Date'))
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  DropdownButtonFormField<String>(
-                    value: _category,
-                    items: categories.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
-                    onChanged: (val) => setState(() => _category = val),
-                    decoration: const InputDecoration(labelText: 'Category'),
-                    dropdownColor: theme.cardTheme.color,
-                  ),
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: _notesController,
-                    style: TextStyle(color: theme.textTheme.bodyLarge?.color),
-                    decoration: const InputDecoration(labelText: 'Notes'),
-                  ),
-                  const SizedBox(height: 20),
-                  const Text(
-                    'Split With:',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 10),
-                  // Toggle between Personal, Friends and Group
-                  Column(
-                    children: [
-                      RadioListTile<String>(
-                        title: const Text('Personal'),
-                        subtitle: const Text('Keep as my own expense'),
-                        value: 'personal',
-                        groupValue: _splitType,
-                        onChanged: (value) {
-                          setState(() {
-                            _splitType = value!;
-                            _selectedGroupId = null;
-                            _selectedFriends.clear();
-                          });
-                        },
+                    style: TextStyle(
+                      color: theme.textTheme.bodyLarge?.color,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    decoration: InputDecoration(
+                      hintText: '${context.currencySymbol} 0.00',
+                      hintStyle: TextStyle(
+                        color: theme.textTheme.bodyMedium?.color?.withOpacity(0.3),
+                        fontWeight: FontWeight.bold,
                       ),
-                      RadioListTile<String>(
-                        title: const Text('Friends'),
-                        subtitle: const Text('Split with individual friends'),
-                        value: 'friends',
-                        groupValue: _splitType,
-                        onChanged: (value) {
-                          setState(() {
-                            _splitType = value!;
-                            _selectedGroupId = null;
-                          });
-                        },
+                      prefixIcon: Icon(Icons.attach_money, size: 24),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                      RadioListTile<String>(
-                        title: const Text('Group'),
-                        subtitle: const Text('Split within a group'),
-                        value: 'group',
-                        groupValue: _splitType,
-                        onChanged: (value) {
-                          setState(() {
-                            _splitType = value!;
-                            _selectedFriends.clear();
-                          });
-                        },
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                    ),
+                    onChanged: (value) => _checkBudgetWarnings(),
+                  ),
+                  const SizedBox(height: 16),
+                  // Compact Split Method Card (Splitwise-style)
+                  InkWell(
+                    onTap: () => _showSplitOptionsDialog(),
+                    borderRadius: BorderRadius.circular(12),
+                    child: Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: theme.cardTheme.color,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: theme.dividerColor.withOpacity(0.2),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.receipt,
+                            color: AppTheme.tealAccent,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              _getSplitMethodText(),
+                              style: TextStyle(
+                                color: theme.textTheme.bodyLarge?.color,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                          Icon(
+                            Icons.chevron_right,
+                            color: theme.textTheme.bodyMedium?.color?.withOpacity(0.5),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  // Compact info chips row
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      // Category chip
+                      InkWell(
+                        onTap: () => _showCategoryPicker(),
+                        borderRadius: BorderRadius.circular(20),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: _category != null
+                                ? AppTheme.tealAccent.withOpacity(0.1)
+                                : theme.cardTheme.color,
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: _category != null
+                                  ? AppTheme.tealAccent.withOpacity(0.3)
+                                  : theme.dividerColor.withOpacity(0.2),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.category_outlined,
+                                size: 16,
+                                color: _category != null
+                                    ? AppTheme.tealAccent
+                                    : theme.textTheme.bodyMedium?.color,
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                _category ?? 'Category',
+                                style: TextStyle(
+                                  color: _category != null
+                                      ? AppTheme.tealAccent
+                                      : theme.textTheme.bodyMedium?.color,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      // Date chip
+                      InkWell(
+                        onTap: _pickDate,
+                        borderRadius: BorderRadius.circular(20),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: theme.cardTheme.color,
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: theme.dividerColor.withOpacity(0.2),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.calendar_today,
+                                size: 16,
+                                color: theme.textTheme.bodyMedium?.color,
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                DateFormat('MMM d').format(_selectedDate),
+                                style: TextStyle(
+                                  color: theme.textTheme.bodyMedium?.color,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      // Notes chip
+                      InkWell(
+                        onTap: () => _showNotesDialog(),
+                        borderRadius: BorderRadius.circular(20),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: _notesController.text.isNotEmpty
+                                ? AppTheme.tealAccent.withOpacity(0.1)
+                                : theme.cardTheme.color,
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: _notesController.text.isNotEmpty
+                                  ? AppTheme.tealAccent.withOpacity(0.3)
+                                  : theme.dividerColor.withOpacity(0.2),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.note_outlined,
+                                size: 16,
+                                color: _notesController.text.isNotEmpty
+                                    ? AppTheme.tealAccent
+                                    : theme.textTheme.bodyMedium?.color,
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                _notesController.text.isEmpty ? 'Add note' : 'Note',
+                                style: TextStyle(
+                                  color: _notesController.text.isNotEmpty
+                                      ? AppTheme.tealAccent
+                                      : theme.textTheme.bodyMedium?.color,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
                     ],
                   ),
@@ -891,6 +1366,41 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                       ),
                   ],
                   const SizedBox(height: 20),
+
+                  // Budget warning banner
+                  if (_budgetWarnings.isNotEmpty)
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 16),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.red[50],
+                        border: Border.all(color: Colors.red[300]!),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(Icons.warning, color: Colors.red[700], size: 24),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: _budgetWarnings.map((warning) => Padding(
+                                padding: const EdgeInsets.only(bottom: 4),
+                                child: Text(
+                                  warning,
+                                  style: TextStyle(
+                                    color: Colors.red[900],
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              )).toList(),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
@@ -1040,7 +1550,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                     children: [
                       Text(name, style: TextStyle(color: theme.textTheme.bodyMedium?.color)),
                       Text(
-                        '₹${entry.value.toStringAsFixed(2)}',
+                        context.formatCurrency(entry.value),
                         style: TextStyle(
                           color: theme.textTheme.bodyLarge?.color,
                           fontWeight: FontWeight.bold,

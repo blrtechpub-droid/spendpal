@@ -152,6 +152,16 @@ class AppTheme {
     elevation: 0,
   );
 
+  static final ButtonStyle successButtonStyle = ElevatedButton.styleFrom(
+    backgroundColor: successColor,
+    foregroundColor: primaryBackground,
+    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(12),
+    ),
+    elevation: 0,
+  );
+
   // Input Decoration
   static InputDecoration inputDecoration({
     required String labelText,

@@ -13,6 +13,14 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
+    // Helper function to check if user is an admin
+    // Add your admin email(s) here
+    function isAdmin() {
+      return isAuthenticated() && request.auth.token.email in [
+        'blrtechpub@gmail.com'
+      ];
+    }
+
     // Users collection
     match /users/{userId} {
       // Allow all authenticated users to read any user profile (for friend search)
@@ -70,8 +78,9 @@ service cloud.firestore {
 
       // Custom Email Patterns subcollection (Smart Email Parsing)
       match /customEmailPatterns/{patternId} {
-        // Users can only read, create, update their own custom email patterns
-        allow read, write: if isOwner(userId);
+        // Users can read/write their own patterns, admins can read all
+        allow read: if isOwner(userId) || isAdmin();
+        allow write: if isOwner(userId);
       }
 
       // Email Learning Data subcollection (Manual corrections)
@@ -85,27 +94,52 @@ service cloud.firestore {
         // Users can only access their own credit card statements
         allow read, write: if isOwner(userId);
       }
+
+      // Account Trackers subcollection (Email sync configuration)
+      match /accountTrackers/{trackerId} {
+        // Users can only access their own account trackers
+        allow read, write: if isOwner(userId);
+      }
     }
 
     // Expenses collection
     match /expenses/{expenseId} {
-      // Allow read if user is the payer or is in splitWith list
+      // Allow read if user is the payer or is in splitWith list, or is admin
       allow get: if isAuthenticated() && (
         resource.data.paidBy == request.auth.uid ||
-        request.auth.uid in resource.data.splitWith
+        request.auth.uid in resource.data.splitWith ||
+        isAdmin()
       );
 
-      // Allow list/query operations for authenticated users
+      // Allow list/query operations for authenticated users and admins
       // (individual document rules will still be checked during reads)
-      allow list: if isAuthenticated();
+      allow list: if isAuthenticated() || isAdmin();
 
-      // Allow create if user is authenticated and is the payer
-      allow create: if isAuthenticated() &&
-        request.resource.data.paidBy == request.auth.uid;
+      // Allow create if user is authenticated and involved in the expense (Splitwise-style)
+      // User can create expense if they are:
+      // 1. The payer (for personal expenses), OR
+      // 2. In the splitWith list (for friend expenses), OR
+      // 3. A member of the group (for group expenses - can add on behalf of others)
+      allow create: if isAuthenticated() && (
+        request.resource.data.paidBy == request.auth.uid ||
+        request.auth.uid in request.resource.data.splitWith ||
+        (request.resource.data.groupId != null && request.resource.data.groupId != '' &&
+         request.auth.uid in get(/databases/$(database)/documents/groups/$(request.resource.data.groupId)).data.members) ||
+        isAdmin()
+      );
 
-      // Allow update/delete only if user is the payer
-      allow update, delete: if isAuthenticated() &&
-        resource.data.paidBy == request.auth.uid;
+      // Allow update/delete if user is involved in the expense (Splitwise-style)
+      // User can modify if they are:
+      // 1. The payer, OR
+      // 2. In the splitWith list (for friend expenses), OR
+      // 3. A member of the group (for group expenses)
+      allow update, delete: if isAuthenticated() && (
+        resource.data.paidBy == request.auth.uid ||
+        request.auth.uid in resource.data.splitWith ||
+        (resource.data.groupId != null && resource.data.groupId != '' &&
+         request.auth.uid in get(/databases/$(database)/documents/groups/$(resource.data.groupId)).data.members) ||
+        isAdmin()
+      );
     }
 
     // Groups collection
@@ -203,18 +237,19 @@ service cloud.firestore {
 
     // Bug Reports collection
     match /bugReports/{reportId} {
-      // Any authenticated user can read their own bug reports
-      allow read: if isAuthenticated() &&
-        resource.data.reportedBy == request.auth.uid;
+      // Users can read their own bug reports, admins can read all
+      allow read: if isAuthenticated() && (
+        resource.data.reportedBy == request.auth.uid ||
+        isAdmin()
+      );
 
       // Any authenticated user can create a bug report
       allow create: if isAuthenticated() &&
         request.resource.data.reportedBy == request.auth.uid &&
         request.resource.data.status == 'pending';
 
-      // Only allow updates to sync status (done by admin/system)
-      // Users cannot update their own bug reports
-      allow update: if false;
+      // Only admins can update bug reports (change status, add GitHub URL)
+      allow update: if isAdmin();
 
       // Users cannot delete bug reports
       allow delete: if false;
@@ -318,8 +353,10 @@ service cloud.firestore {
         // Only verification fields can be updated
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isVerified', 'verifiedAt']);
 
-      // Users cannot delete settlements (permanent record)
-      allow delete: if false;
+      // Sender can delete unverified settlements they created
+      allow delete: if isAuthenticated() &&
+        resource.data.fromUserId == request.auth.uid &&
+        resource.data.isVerified == false;
     }
 
     // Receipts collection
@@ -379,24 +416,24 @@ service cloud.firestore {
       // All authenticated users can read patterns
       allow read: if isAuthenticated();
 
-      // System creates patterns (users don't directly create)
-      allow write: if false;
+      // Allow authenticated app to create/update patterns from AI learning
+      allow write: if isAuthenticated();
     }
 
     match /regex_patterns/bill_patterns/{patternId} {
       // All authenticated users can read patterns
       allow read: if isAuthenticated();
 
-      // System creates patterns (users don't directly create)
-      allow write: if false;
+      // Allow authenticated app to create/update patterns from AI learning
+      allow write: if isAuthenticated();
     }
 
     match /regex_patterns/receipt_patterns/{patternId} {
       // All authenticated users can read patterns
       allow read: if isAuthenticated();
 
-      // System creates patterns (users don't directly create)
-      allow write: if false;
+      // Allow authenticated app to create/update patterns from AI learning
+      allow write: if isAuthenticated();
     }
 
     // Global Email Parsing Patterns (Smart Email Parsing)
@@ -407,6 +444,83 @@ service cloud.firestore {
       // Only Cloud Functions can create/update patterns (via admin SDK)
       // Users cannot directly write to global patterns
       allow write: if false;
+    }
+
+    // Account Trackers collection (Top-level for querying across users)
+    match /accountTrackers/{trackerId} {
+      // Users can read/write their own trackers
+      allow read: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid;
+
+      // Users can create trackers for themselves
+      allow create: if isAuthenticated() &&
+        request.resource.data.userId == request.auth.uid;
+
+      // Users can update their own trackers
+      allow update: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid;
+
+      // Users can delete their own trackers
+      allow delete: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid;
+    }
+
+    // Budgets collection (Monthly budget tracking)
+    match /budgets/{budgetId} {
+      // Users can only access their own budgets
+      allow read: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid;
+
+      // Users can create budgets for themselves
+      allow create: if isAuthenticated() &&
+        request.resource.data.userId == request.auth.uid;
+
+      // Users can update their own budgets
+      allow update: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid;
+
+      // Users can delete their own budgets
+      allow delete: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid;
+    }
+
+    // Savings Goals collection
+    match /savingsGoals/{goalId} {
+      // Users can only access their own savings goals
+      allow read: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid;
+
+      // Users can create savings goals for themselves
+      // Validates required fields and initial values
+      allow create: if isAuthenticated() &&
+        request.resource.data.userId == request.auth.uid &&
+        request.resource.data.keys().hasAll(['userId', 'title', 'targetAmount', 'currentAmount', 'deadline', 'createdAt', 'isCompleted']) &&
+        request.resource.data.title is string &&
+        request.resource.data.title.size() > 0 &&
+        request.resource.data.targetAmount is number &&
+        request.resource.data.targetAmount > 0 &&
+        request.resource.data.currentAmount is number &&
+        request.resource.data.currentAmount >= 0 &&
+        request.resource.data.deadline is timestamp &&
+        request.resource.data.createdAt is timestamp &&
+        request.resource.data.isCompleted is bool;
+
+      // Users can update their own savings goals
+      // Validates data types and constraints
+      allow update: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid &&
+        request.resource.data.userId == request.auth.uid &&
+        // Target amount should not change after creation
+        request.resource.data.targetAmount == resource.data.targetAmount &&
+        // Current amount must be >= 0 and <= target amount
+        request.resource.data.currentAmount >= 0 &&
+        request.resource.data.currentAmount <= request.resource.data.targetAmount &&
+        // If completed, current amount should equal target amount
+        (!request.resource.data.isCompleted || request.resource.data.currentAmount == request.resource.data.targetAmount);
+
+      // Users can delete their own savings goals
+      allow delete: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid;
     }
   }
 }

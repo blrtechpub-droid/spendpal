@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'dart:io';
 import 'package:spendpal/theme/app_theme.dart';
 import 'package:spendpal/screens/sms_expenses/sms_expenses_screen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import 'package:spendpal/screens/expense/expense_detail_screen.dart';
+import 'package:spendpal/utils/currency_utils.dart';
 
 /// Auto-Import tab combines:
 /// 1. Pending SMS expenses (queue)
@@ -35,22 +38,27 @@ class _AutoImportTabState extends State<AutoImportTab> {
             padding: const EdgeInsets.all(16),
             child: Column(
               children: [
-                _buildQuickAccessCard(
-                  context,
-                  title: 'SMS Transactions',
-                  subtitle: 'Review and categorize transactions from SMS',
-                  icon: Icons.message,
-                  color: AppTheme.tealAccent,
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const SmsExpensesScreen(),
-                      ),
-                    );
-                  },
-                ),
-                const SizedBox(height: 12),
+                // SMS Transactions - Android only
+                if (!kIsWeb && Platform.isAndroid) ...[
+                  _buildQuickAccessCard(
+                    context,
+                    title: 'SMS Transactions',
+                    subtitle: 'Review and categorize transactions from SMS',
+                    icon: Icons.message,
+                    color: AppTheme.tealAccent,
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const SmsExpensesScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                ],
+
+                // Email Transactions - All platforms
                 _buildQuickAccessCard(
                   context,
                   title: 'Email Transactions',
@@ -61,28 +69,12 @@ class _AutoImportTabState extends State<AutoImportTab> {
                     Navigator.pushNamed(context, '/email_transactions');
                   },
                 ),
-              ],
-            ),
-          ),
 
-          // Divider
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              children: [
-                Expanded(child: Divider(color: theme.dividerTheme.color)),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: Text(
-                    'Already Imported',
-                    style: TextStyle(
-                      color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-                Expanded(child: Divider(color: theme.dividerTheme.color)),
+                // iOS Info Banner
+                if (!kIsWeb && Platform.isIOS) ...[
+                  const SizedBox(height: 12),
+                  _buildIosInfoBanner(context),
+                ],
               ],
             ),
           ),
@@ -150,50 +142,82 @@ class _AutoImportTabState extends State<AutoImportTab> {
                 return bTime.compareTo(aTime);
               });
 
-              if (autoImportedExpenses.isEmpty) {
-                return Padding(
-                  padding: const EdgeInsets.all(32),
-                  child: Center(
-                    child: Column(
-                      children: [
-                        Icon(
-                          Icons.inbox,
-                          size: 64,
-                          color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.5),
+              // Divider with count
+              final divider = Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Row(
+                  children: [
+                    Expanded(child: Divider(color: theme.dividerTheme.color)),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      child: Text(
+                        'Already Imported (${autoImportedExpenses.length})',
+                        style: TextStyle(
+                          color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
                         ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'No imported expenses yet',
-                          style: TextStyle(
-                            color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
-                            fontSize: 16,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Scan SMS or review pending transactions above',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.5),
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
-                  ),
+                    Expanded(child: Divider(color: theme.dividerTheme.color)),
+                  ],
+                ),
+              );
+
+              if (autoImportedExpenses.isEmpty) {
+                return Column(
+                  children: [
+                    divider,
+                    Padding(
+                      padding: const EdgeInsets.all(32),
+                      child: Center(
+                        child: Column(
+                          children: [
+                            Icon(
+                              Icons.inbox,
+                              size: 64,
+                              color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.5),
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              'No imported expenses yet',
+                              style: TextStyle(
+                                color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
+                                fontSize: 16,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Scan SMS or review pending transactions above',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.5),
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 );
               }
 
-              return ListView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                itemCount: autoImportedExpenses.length,
-                itemBuilder: (context, index) {
-                  final expenseDoc = autoImportedExpenses[index];
-                  final data = expenseDoc.data() as Map<String, dynamic>;
-                  return _buildExpenseCard(context, expenseDoc.id, data);
-                },
+              return Column(
+                children: [
+                  divider,
+                  ListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    itemCount: autoImportedExpenses.length,
+                    itemBuilder: (context, index) {
+                      final expenseDoc = autoImportedExpenses[index];
+                      final data = expenseDoc.data() as Map<String, dynamic>;
+                      return _buildExpenseCard(context, expenseDoc.id, data);
+                    },
+                  ),
+                ],
               );
             },
           ),
@@ -375,7 +399,7 @@ class _AutoImportTabState extends State<AutoImportTab> {
               ),
               // Amount
               Text(
-                '₹${amount.toStringAsFixed(2)}',
+                context.formatCurrency(amount),
                 style: const TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
@@ -385,6 +409,56 @@ class _AutoImportTabState extends State<AutoImportTab> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildIosInfoBanner(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.blue.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Colors.blue.withValues(alpha: 0.3),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            Icons.info_outline,
+            color: Colors.blue,
+            size: 24,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'iOS SMS Limitation',
+                  style: TextStyle(
+                    color: theme.textTheme.bodyLarge?.color,
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'iOS doesn\'t allow apps to read SMS messages due to privacy restrictions. However, email transaction parsing is fully supported and works great for tracking expenses.',
+                  style: TextStyle(
+                    color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.8),
+                    fontSize: 12,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

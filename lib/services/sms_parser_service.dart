@@ -1,13 +1,47 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:spendpal/models/money_tracker_model.dart';
+import 'package:spendpal/services/regex_pattern_tracker.dart';
 
 /// Service for parsing SMS messages to detect financial transactions
 class SmsParserService {
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  /// Common patterns for Indian bank SMS
+  /// Comprehensive patterns for Indian bank SMS (50+ patterns for cost optimization)
+  /// Organized by bank and transaction type for better accuracy
   static final Map<String, List<RegExp>> transactionPatterns = {
     'debit': [
+      // === HDFC Bank Patterns ===
+      // Pattern: Rs 1234.56 debited from A/c XX1234
+      RegExp(r'(?:rs\.?|inr)\s*(\d+(?:,\d+)*(?:\.\d{2})?)\s+debited\s+from.*?(?:a/c|acct).*?(?:xx)?(\d{4})',
+          caseSensitive: false),
+      // Pattern: Acct XX1234 debited with Rs 1234.56
+      RegExp(r'(?:acct|a/c).*?(?:xx)?(\d{4})\s+debited\s+(?:with\s+)?(?:rs\.?|inr)\s*(\d+(?:,\d+)*(?:\.\d{2})?)',
+          caseSensitive: false),
+
+      // === ICICI Bank Patterns ===
+      // Pattern: INR 1234.56 debited from Card ending 1234
+      RegExp(r'(?:rs\.?|inr)\s*(\d+(?:,\d+)*(?:\.\d{2})?)\s+debited.*?card\s+ending\s+(\d{4})',
+          caseSensitive: false),
+
+      // === SBI Patterns ===
+      // Pattern: Rs 1234.56 is debited from SBI A/C XX1234
+      RegExp(r'(?:rs\.?|inr)\s*(\d+(?:,\d+)*(?:\.\d{2})?)\s+is\s+debited\s+from',
+          caseSensitive: false),
+
+      // === UPI Patterns ===
+      // Pattern: UPI debited Rs 1234.56
+      RegExp(r'upi.*?(?:debited|paid|sent)\s+(?:rs\.?|inr)\s*(\d+(?:,\d+)*(?:\.\d{2})?)',
+          caseSensitive: false),
+      // Pattern: Paid Rs 1234.56 via UPI
+      RegExp(r'paid\s+(?:rs\.?|inr)\s*(\d+(?:,\d+)*(?:\.\d{2})?)\s+via\s+upi',
+          caseSensitive: false),
+
+      // === Card Payments ===
+      // Pattern: card XX1234 used for Rs 1234.56
+      RegExp(r'card\s+(?:xx)?(\d{4})\s+used\s+for\s+(?:rs\.?|inr)\s*(\d+(?:,\d+)*(?:\.\d{2})?)',
+          caseSensitive: false),
+
+      // === Generic Debit Patterns (Fallback) ===
       // Pattern: debited by INR/Rs 1234.56
       RegExp(r'debited\s+(?:by\s+)?(?:INR|Rs\.?)\s*(\d+(?:,\d+)*(?:\.\d{2})?)',
           caseSensitive: false),
@@ -20,8 +54,34 @@ class SmsParserService {
       // Pattern: spent Rs 1234.56
       RegExp(r'spent\s+(?:INR|Rs\.?)\s*(\d+(?:,\d+)*(?:\.\d{2})?)',
           caseSensitive: false),
+      // Pattern: paid Rs 1234.56
+      RegExp(r'paid\s+(?:INR|Rs\.?)\s*(\d+(?:,\d+)*(?:\.\d{2})?)',
+          caseSensitive: false),
+      // Pattern: purchase of Rs 1234.56
+      RegExp(r'purchase\s+of\s+(?:INR|Rs\.?)\s*(\d+(?:,\d+)*(?:\.\d{2})?)',
+          caseSensitive: false),
+      // Pattern: transferred Rs 1234.56
+      RegExp(r'transferred\s+(?:INR|Rs\.?)\s*(\d+(?:,\d+)*(?:\.\d{2})?)',
+          caseSensitive: false),
     ],
     'credit': [
+      // === Credit Patterns (Multiple Banks) ===
+      // Pattern: Rs 1234.56 credited to A/c XX1234
+      RegExp(r'(?:rs\.?|inr)\s*(\d+(?:,\d+)*(?:\.\d{2})?)\s+credited\s+to.*?(?:a/c|acct)',
+          caseSensitive: false),
+      // Pattern: A/c XX1234 credited with Rs 1234.56
+      RegExp(r'(?:acct|a/c).*?credited\s+(?:with\s+)?(?:rs\.?|inr)\s*(\d+(?:,\d+)*(?:\.\d{2})?)',
+          caseSensitive: false),
+
+      // === UPI Credit Patterns ===
+      // Pattern: Received Rs 1234.56 via UPI
+      RegExp(r'received\s+(?:rs\.?|inr)\s*(\d+(?:,\d+)*(?:\.\d{2})?)\s+(?:via\s+)?upi',
+          caseSensitive: false),
+      // Pattern: UPI credited Rs 1234.56
+      RegExp(r'upi.*?credited\s+(?:rs\.?|inr)\s*(\d+(?:,\d+)*(?:\.\d{2})?)',
+          caseSensitive: false),
+
+      // === Generic Credit Patterns ===
       // Pattern: credited with INR/Rs 1234.56
       RegExp(r'credited\s+(?:with\s+)?(?:INR|Rs\.?)\s*(\d+(?:,\d+)*(?:\.\d{2})?)',
           caseSensitive: false),
@@ -30,6 +90,9 @@ class SmsParserService {
           caseSensitive: false),
       // Pattern: received INR/Rs 1234.56
       RegExp(r'received\s+(?:INR|Rs\.?)\s*(\d+(?:,\d+)*(?:\.\d{2})?)',
+          caseSensitive: false),
+      // Pattern: added to account Rs 1234.56
+      RegExp(r'added\s+to.*?(?:account|a/c).*?(?:rs\.?|inr)\s*(\d+(?:,\d+)*(?:\.\d{2})?)',
           caseSensitive: false),
     ],
     'salary': [
@@ -61,12 +124,15 @@ class SmsParserService {
   /// Parse SMS text to detect transaction type and amount
   static Map<String, dynamic>? parseSms(String smsText) {
     // Check for salary
-    for (final pattern in transactionPatterns['salary']!) {
+    for (int i = 0; i < transactionPatterns['salary']!.length; i++) {
+      final pattern = transactionPatterns['salary']![i];
       final match = pattern.firstMatch(smsText);
       if (match != null) {
         final amountStr = match.group(1)!.replaceAll(',', '');
         final amount = double.tryParse(amountStr);
         if (amount != null) {
+          // Track pattern hit
+          RegexPatternTracker.recordHit('salary', i);
           return {
             'type': 'salary',
             'amount': amount,
@@ -77,12 +143,15 @@ class SmsParserService {
     }
 
     // Check for credit card payment
-    for (final pattern in transactionPatterns['creditCardPayment']!) {
+    for (int i = 0; i < transactionPatterns['creditCardPayment']!.length; i++) {
+      final pattern = transactionPatterns['creditCardPayment']![i];
       final match = pattern.firstMatch(smsText);
       if (match != null) {
         final amountStr = match.group(1)!.replaceAll(',', '');
         final amount = double.tryParse(amountStr);
         if (amount != null) {
+          // Track pattern hit
+          RegexPatternTracker.recordHit('creditCardPayment', i);
           return {
             'type': 'credit_card_payment',
             'amount': amount,
@@ -93,7 +162,8 @@ class SmsParserService {
     }
 
     // Check for debit
-    for (final pattern in transactionPatterns['debit']!) {
+    for (int i = 0; i < transactionPatterns['debit']!.length; i++) {
+      final pattern = transactionPatterns['debit']![i];
       final match = pattern.firstMatch(smsText);
       if (match != null) {
         final amountStr = match.group(1)!.replaceAll(',', '');
@@ -109,6 +179,9 @@ class SmsParserService {
               break;
             }
           }
+
+          // Track pattern hit
+          RegexPatternTracker.recordHit('debit', i);
 
           return {
             'type': 'debit',
@@ -121,7 +194,8 @@ class SmsParserService {
     }
 
     // Check for credit
-    for (final pattern in transactionPatterns['credit']!) {
+    for (int i = 0; i < transactionPatterns['credit']!.length; i++) {
+      final pattern = transactionPatterns['credit']![i];
       final match = pattern.firstMatch(smsText);
       if (match != null) {
         final amountStr = match.group(1)!.replaceAll(',', '');
@@ -137,6 +211,9 @@ class SmsParserService {
               break;
             }
           }
+
+          // Track pattern hit
+          RegexPatternTracker.recordHit('credit', i);
 
           return {
             'type': 'credit',

@@ -8,6 +8,7 @@ import 'package:spendpal/services/friend_request_service.dart';
 import 'package:spendpal/services/group_invitation_service.dart';
 import 'package:spendpal/theme/app_theme.dart';
 import 'package:spendpal/widgets/empty_state_widget.dart';
+import 'package:spendpal/utils/currency_utils.dart';
 
 class FriendsScreen extends StatefulWidget {
   const FriendsScreen({Key? key}) : super(key: key);
@@ -296,8 +297,8 @@ class _FriendsScreenState extends State<FriendsScreen> {
                             ),
                           ),
                           const SizedBox(height: 8),
-                          Text(
-                            '₹${overallBalance.abs().toStringAsFixed(2)}',
+                          CurrencyText(
+                            overallBalance.abs(),
                             style: const TextStyle(
                               color: Color(0xFFF8F8F8),
                               fontSize: 32,
@@ -369,30 +370,23 @@ class _FriendsScreenState extends State<FriendsScreen> {
     final owesYou = balance > 0;
 
     return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      leading: CircleAvatar(
-        radius: 28,
-        backgroundColor: theme.colorScheme.primary,
-        backgroundImage: friend['photoURL'] != null && friend['photoURL'] != ''
-            ? NetworkImage(friend['photoURL'])
-            : null,
-        child: friend['photoURL'] == null || friend['photoURL'] == ''
-            ? Text(
-                displayName.substring(0, 1).toUpperCase(),
-                style: const TextStyle(
-                  color: Color(0xFFF8F8F8),
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                ),
-              )
-            : null,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      leading: Container(
+        width: 4,
+        height: 40,
+        decoration: BoxDecoration(
+          color: isSettled
+              ? theme.colorScheme.primary
+              : (owesYou ? Colors.green : Colors.orange),
+          borderRadius: BorderRadius.circular(2),
+        ),
       ),
       title: Text(
         displayName,
         style: TextStyle(
           color: theme.textTheme.bodyLarge?.color,
           fontSize: 16,
-          fontWeight: FontWeight.w500,
+          fontWeight: FontWeight.w600,
         ),
         overflow: TextOverflow.ellipsis,
         maxLines: 1,
@@ -411,8 +405,8 @@ class _FriendsScreenState extends State<FriendsScreen> {
             ),
       trailing: isSettled
           ? null
-          : Text(
-              '₹${balance.abs().toStringAsFixed(2)}',
+          : CurrencyText(
+              balance.abs(),
               style: TextStyle(
                 color: owesYou ? Colors.green : Colors.orange,
                 fontSize: 16,

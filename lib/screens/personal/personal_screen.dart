@@ -9,6 +9,7 @@ import 'package:spendpal/screens/expense/expense_screen.dart';
 import 'package:spendpal/screens/money_tracker/money_tracker_screen.dart';
 import 'package:spendpal/screens/personal/auto_import_tab.dart';
 import 'package:spendpal/widgets/savings_goals_widget.dart';
+import 'package:spendpal/utils/currency_utils.dart';
 
 class PersonalExpensesScreen extends StatefulWidget {
   const PersonalExpensesScreen({super.key});
@@ -471,7 +472,7 @@ class _PersonalExpensesScreenState extends State<PersonalExpensesScreen> with Si
                               children: [
                                 _buildStatCard(
                                   'This Month',
-                                  '₹${monthlyTotal.toStringAsFixed(2)}',
+                                  context.formatCurrency(monthlyTotal),
                                   Icons.calendar_month,
                                   AppTheme.tealAccent,
                                 ),
@@ -665,7 +666,7 @@ class _PersonalExpensesScreenState extends State<PersonalExpensesScreen> with Si
               const SizedBox(width: 8),
               // Amount
               Text(
-                '₹${entry.value.toStringAsFixed(0)}',
+                context.formatCurrency(entry.value),
                 style: TextStyle(
                   fontSize: 12,
                   color: color.withValues(alpha: 0.8),
@@ -725,10 +726,10 @@ class _PersonalExpensesScreenState extends State<PersonalExpensesScreen> with Si
                     ),
                   ),
                   Text(
-                    '₹${entry.value.fold<double>(0.0, (total, doc) {
+                    context.formatCurrency(entry.value.fold<double>(0.0, (total, doc) {
                       final amount = ((doc.data() as Map<String, dynamic>)['amount'] as num?)?.toDouble() ?? 0.0;
                       return total + amount;
-                    }).toStringAsFixed(2)}',
+                    })),
                     style: const TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
@@ -932,7 +933,7 @@ class _PersonalExpensesScreenState extends State<PersonalExpensesScreen> with Si
                   ],
                 ),
                 trailing: Text(
-                  '₹${amount.toStringAsFixed(2)}',
+                  context.formatCurrency(amount),
                   style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
@@ -995,10 +996,10 @@ class _PersonalExpensesScreenState extends State<PersonalExpensesScreen> with Si
                 ),
               ),
               Text(
-                '₹${entry.value.fold<double>(0.0, (total, doc) {
+                context.formatCurrency(entry.value.fold<double>(0.0, (total, doc) {
                   final amount = ((doc.data() as Map<String, dynamic>)['amount'] as num?)?.toDouble() ?? 0.0;
                   return total + amount;
-                }).toStringAsFixed(2)}',
+                })),
                 style: const TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
@@ -1177,7 +1178,7 @@ class _PersonalExpensesScreenState extends State<PersonalExpensesScreen> with Si
                     const SizedBox(width: 12),
                     // Amount
                     Text(
-                      '₹${amount.toStringAsFixed(2)}',
+                      context.formatCurrency(amount),
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,

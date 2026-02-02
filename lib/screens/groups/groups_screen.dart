@@ -8,6 +8,7 @@ import 'package:spendpal/services/balance_service.dart';
 import 'package:spendpal/screens/requests/pending_requests_screen.dart';
 import 'package:spendpal/widgets/empty_state_widget.dart';
 import 'package:spendpal/services/group_invitation_service.dart';
+import 'package:spendpal/utils/currency_utils.dart';
 
 class GroupsScreen extends StatefulWidget {
   const GroupsScreen({super.key});
@@ -205,8 +206,8 @@ class _GroupsScreenState extends State<GroupsScreen> {
                                   ),
                                 ),
                                 const SizedBox(height: 8),
-                                Text(
-                                  '₹${overallBalance.abs().toStringAsFixed(2)}',
+                                CurrencyText(
+                                  overallBalance.abs(),
                                   style: const TextStyle(
                                     color: Color(0xFFF8F8F8),
                                     fontSize: 32,
@@ -294,8 +295,8 @@ class _GroupsScreenState extends State<GroupsScreen> {
                                 padding: const EdgeInsets.only(top: 2),
                                 child: Text(
                                   totalNonGroup < 0
-                                      ? 'you owe ₹${(-totalNonGroup).toStringAsFixed(2)}'
-                                      : 'you are owed ₹${totalNonGroup.toStringAsFixed(2)}',
+                                      ? 'you owe ${context.formatCurrency((-totalNonGroup))}'
+                                      : 'you are owed ${context.formatCurrency(totalNonGroup)}',
                                   style: TextStyle(
                                     color: totalNonGroup < 0 ? Colors.orange : theme.colorScheme.primary,
                                     fontSize: 13,
@@ -333,8 +334,8 @@ class _GroupsScreenState extends State<GroupsScreen> {
                                             maxLines: 1,
                                           ),
                                         ),
-                                        Text(
-                                          '₹${balance.abs().toStringAsFixed(2)}',
+                                        CurrencyText(
+                                          balance.abs(),
                                           style: TextStyle(
                                             color: balance < 0 ? Colors.orange : theme.colorScheme.primary,
                                             fontSize: 14,
@@ -425,7 +426,6 @@ class _GroupsScreenState extends State<GroupsScreen> {
   Widget _buildGroupCard(DocumentSnapshot group, String currentUserId, ThemeData theme) {
     final data = group.data() as Map<String, dynamic>;
     final groupName = data['name'] ?? 'Unnamed Group';
-    final groupPhoto = data['photo'] ?? '';
     final groupColor = _getGroupColor(groupName);
 
     return FutureBuilder<Map<String, double>>(
@@ -455,43 +455,14 @@ class _GroupsScreenState extends State<GroupsScreen> {
           child: Column(
             children: [
               ListTile(
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 leading: Container(
-                  width: 48,
-                  height: 48,
+                  width: 4,
+                  height: 40,
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        groupColor,
-                        groupColor.withValues(
-                          red: (groupColor.r * 0.7).clamp(0, 1),
-                          green: (groupColor.g * 0.7).clamp(0, 1),
-                          blue: (groupColor.b * 0.7).clamp(0, 1),
-                        ),
-                      ],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: groupColor.withValues(alpha: 0.3),
-                        blurRadius: 8,
-                        offset: const Offset(0, 3),
-                      ),
-                    ],
+                    color: groupColor,
+                    borderRadius: BorderRadius.circular(2),
                   ),
-                  child: groupPhoto.isNotEmpty
-                      ? ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: Image.network(
-                            groupPhoto,
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) =>
-                                const Icon(Icons.home, color: Color(0xFFF8F8F8), size: 28),
-                          ),
-                        )
-                      : const Icon(Icons.home, color: Color(0xFFF8F8F8), size: 28),
                 ),
                 title: Text(
                   groupName,
@@ -508,8 +479,8 @@ class _GroupsScreenState extends State<GroupsScreen> {
                         padding: const EdgeInsets.only(top: 2),
                         child: Text(
                           netBalance < 0
-                              ? 'you owe ₹${(-netBalance).toStringAsFixed(2)}'
-                              : 'you are owed ₹${netBalance.toStringAsFixed(2)}',
+                              ? 'you owe ${context.formatCurrency((-netBalance))}'
+                              : 'you are owed ${context.formatCurrency(netBalance)}',
                           style: TextStyle(
                             color: netBalance < 0 ? Colors.orange : theme.colorScheme.primary,
                             fontSize: 13,
@@ -567,8 +538,8 @@ class _GroupsScreenState extends State<GroupsScreen> {
                               maxLines: 1,
                             ),
                           ),
-                          Text(
-                            '₹${balance.abs().toStringAsFixed(2)}',
+                          CurrencyText(
+                            balance.abs(),
                             style: TextStyle(
                               color: balance < 0 ? Colors.orange : theme.colorScheme.primary,
                               fontSize: 13,

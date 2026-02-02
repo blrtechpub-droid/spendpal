@@ -1,153 +1,137 @@
 # SpendPal - Project Status
 
-**Last Updated:** 2025-10-26 18:30
+**Last Updated:** 2026-01-19 (Current Session)
 **Current Branch:** `main`
 **Current Version:** 1.0.0+10
 
 ---
 
-## 🎯 Active Tasks
+## 🎯 Current Session: Currency Migration - Complete
 
-### In Progress
-- [ ] Upload app bundle to Google Play Console (Internal Testing)
-- [ ] Add internal testers to Play Console
-- [ ] Test app on multiple devices
+### ✅ Completed (Today: 2026-01-19)
 
-### Ready to Start
-- [ ] Create release notes for testers
-- [ ] Share opt-in URL with testers
-- [ ] Monitor crash reports in Play Console
+**Currency Symbol Migration - Hardcoded ₹ to Dynamic Currency**
 
----
+Migrated all user-facing hardcoded `₹` symbols to use the dynamic currency system (`context.formatCurrency()` and `context.currencySymbol`).
 
-## ✅ Recently Completed (Today: 2025-10-26)
+#### Files Migrated This Session (17 occurrences)
 
-- [x] **Built release app bundle v1.0.0+10** (49MB)
-  - Location: `build/app/outputs/bundle/release/app-release.aab`
-  - Build completed at: 13:08
-  - Signed and ready for Play Store
-- [x] **Updated README.md** with comprehensive commands reference
-  - Added Claude Code commands
-  - Added Flutter, Firebase, Git commands
-  - Added debugging and maintenance commands
-- [x] **Recovered from VS Code crash** during build process
-  - Successfully re-ran flutter clean and build
+| File | Occurrences | Changes |
+|------|-------------|---------|
+| `budget_screen.dart` | 5 | Spent/Limit/Remaining/Over budget displays |
+| `budget_setup_dialog.dart` | 2 | Input field prefixes |
+| `email_transactions_screen.dart` | 2 | Transaction amount displays |
+| `account_management_screen.dart` | 2 | Credit limit and balance displays |
+| `qr_scanner_screen.dart` | 2 | UPI payment amount displays |
+| `update_price_screen.dart` | 1 | Current price display |
+| `investment_sms_review_screen.dart` | 3 | Amount/NAV/Price displays |
 
----
+#### Migration Pattern Applied
+```dart
+// Before
+'₹${amount.toStringAsFixed(2)}'
 
-## 📦 Current Build Information
+// After
+context.formatCurrency(amount)
 
-**Build Status:** ✅ Ready for Upload
+// For input prefixes:
+// Before
+prefixText: '₹',
 
-| Property | Value |
-|----------|-------|
-| **Version** | 1.0.0 (Build 10) |
-| **Package Name** | com.blrtechpub.spendpal |
-| **File** | app-release.aab |
-| **Size** | 49 MB |
-| **Location** | `build/app/outputs/bundle/release/app-release.aab` |
-| **Built On** | 2025-10-26 at 13:08 |
-| **Signed** | ✅ Yes (with upload keystore) |
-| **Target** | Google Play Internal Testing |
+// After
+prefixText: context.currencySymbol,
+```
 
-**Build Output:**
-- Material Icons optimized (99.3% reduction)
-- Debug symbols included in bundle metadata
-- ProGuard rules configured
-- App signing configured correctly
+#### Remaining Occurrences (Intentional - Not Migrated)
+- **Debug print statements** (2): bill_upload_screen.dart, email_transactions_screen.dart
+- **Code comments** (2): sms_processing_stats_screen.dart, processing_stats_screen.dart
+- **Currency picker dropdown** (2): group_settings_screen.dart - data values for currency selection
+- **Default fallback** (1): sms_expenses_screen.dart - gets overwritten by CurrencyService
+- **Static label** (1): account_screen.dart - "INR (₹)" label
 
 ---
 
-## 🚀 Next Steps
+## 📊 Currency Infrastructure (Already Implemented)
 
-### Immediate (Today)
-1. **Upload to Play Console**
-   - Go to: https://play.google.com/console
-   - Navigate to: Production → Testing → Internal testing
-   - Upload: `build/app/outputs/bundle/release/app-release.aab`
-   - Release name: `1.0.0 (Build 10) - Initial Testing Release`
+### Core Files
+- `lib/providers/currency_provider.dart` - State management
+- `lib/services/currency_service.dart` - Currency data/storage
+- `lib/utils/currency_utils.dart` - Extension methods
+- `lib/screens/settings/currency_selection_screen.dart` - UI for selection
 
-2. **Add Testers**
-   - Create internal testing list
-   - Add tester emails (check: `play_store_testers.csv`)
-   - Copy opt-in URL
+### Extension Methods Available
+```dart
+// Format with symbol and 2 decimal places
+context.formatCurrency(1234.56) // Returns "₹1,234.56" or "$1,234.56"
 
-3. **Share with Testers**
-   - Send opt-in URL via email/Slack
-   - Provide testing instructions
-   - Request feedback on key features
-
-### This Week
-- [ ] Monitor Play Console for crash reports
-- [ ] Collect tester feedback
-- [ ] Fix any critical bugs found
-- [ ] Prepare for closed testing rollout
-
-### Next Sprint
-- [ ] Promote to closed testing (wider audience)
-- [ ] Add app screenshots to Play Store listing
-- [ ] Complete data safety section
-- [ ] Prepare privacy policy
+// Get just the symbol
+context.currencySymbol // Returns "₹" or "$" etc.
+```
 
 ---
 
-## 🔧 Environment State
+## 🔧 Files Modified Today
 
-**Development Setup:**
-- **Flutter:** 3.35.4
-- **Dart:** 3.9.2
-- **Platform:** macOS (Darwin 24.6.0)
-- **Firebase Project:** spendpal (active)
+1. **`lib/screens/budget/budget_screen.dart`**
+   - Added import for currency_utils.dart
+   - Lines 357, 378, 421-422, 495: Replaced hardcoded ₹ with dynamic currency
 
-**Last Verified:**
-- ✅ Firebase authentication working
-- ✅ Firestore rules deployed
-- ✅ App signing configured
-- ✅ Dependencies up to date
-- ⚠️ 31 packages have newer versions (non-critical)
+2. **`lib/screens/budget/budget_setup_dialog.dart`**
+   - Added import for currency_utils.dart
+   - Lines 118, 159: Changed prefixText from const '₹' to context.currencySymbol
 
-**Key Files Present:**
-- ✅ `android/app/upload-keystore.jks`
-- ✅ `android/key.properties`
-- ✅ `android/app/google-services.json`
-- ✅ `ios/Runner/GoogleService-Info.plist`
+3. **`lib/screens/email_transactions/email_transactions_screen.dart`**
+   - Added import for currency_utils.dart
+   - Lines 1226, 2017: Replaced amount formatting
 
----
+4. **`lib/screens/account/account_management_screen.dart`**
+   - Added import for currency_utils.dart
+   - Lines 289, 304: Credit limit and balance displays
 
-## 🐛 Known Issues
+5. **`lib/screens/qr/qr_scanner_screen.dart`**
+   - Added import for currency_utils.dart
+   - Lines 83, 95: UPI payment amount displays
 
-### Active Issues
-- None currently blocking release
+6. **`lib/screens/investments/update_price_screen.dart`**
+   - Added import for currency_utils.dart
+   - Line 338: Current price display
 
-### Monitoring
-- Firebase function logs occasionally show timeout on `parseBill` (non-critical)
-- Group notification delay reported by some testers (under investigation)
-
-### Recently Fixed
-- ✅ Group invitation acceptance issues (commit: 80b8204)
-- ✅ Group notification problems (commit: a803c56)
+7. **`lib/screens/investment/investment_sms_review_screen.dart`**
+   - Replaced intl import with currency_utils.dart
+   - Removed hardcoded NumberFormat
+   - Lines 204, 228, 236: Amount/NAV/Price displays
 
 ---
 
-## 📝 Important Context
+## 📱 Previous Sessions Summary
 
-### Current Release Goal
-**Objective:** Launch internal testing on Google Play Store
-**Target Date:** 2025-10-28
-**Blockers:** None
+### Session: Money Tracker Dashboard Enhancements (2025-12-29)
+- ✅ InvestmentsCard integration with portfolio data
+- ✅ Removed redundant Monthly Finances card
+- ✅ Extended MoneyTrackerAccount model for loan support
+- ✅ Created DebtsCard widget for loan/debt tracking
+- ✅ Made Net Worth card expandable with breakdown view
+- ✅ Fixed all code quality warnings
 
-### Key Decisions Made
-1. **Version Strategy:** Starting with 1.0.0+10 for first public test
-2. **Testing Strategy:** Internal testing → Closed testing → Production
-3. **Package Name:** `com.blrtechpub.spendpal` (locked in, cannot change)
-4. **Signing:** Using upload keystore (enrolled in Play App Signing)
+### Session: Investment Asset Management (Previous)
+- ✅ Full CRUD operations for investment assets
+- ✅ Dynamic form fields by asset type
+- ✅ Smart dropdowns (banks, platforms, rates, tenure)
+- ✅ Autocomplete for asset names
+- ✅ Edit/Delete functionality with cascade delete
 
-### Testing Artifacts
-- Tester list: `play_store_testers.csv`
-- Testing guides:
-  - `.claude/GOOGLE_PLAY_CONSOLE_GUIDE.md`
-  - `.claude/APP_STORE_TESTING_QUICKSTART.md`
-  - `PLAYSTORE_RELEASE.md`
+---
+
+## 🎯 Next Steps
+
+### For Currency Migration
+- ✅ All user-facing screens migrated
+- Remaining: Debug statements and intentional data values (acceptable)
+
+### For General Testing
+- [ ] Test currency display across all screens
+- [ ] Test currency selection changes propagate correctly
+- [ ] Verify P/L displays use correct formatting
 
 ---
 
@@ -155,90 +139,35 @@
 
 ### If Resuming After Crash/Timeout:
 
-**1. Check Current State**
+**1. Read This Status File**
 ```bash
-# Verify build exists
-ls -lh build/app/outputs/bundle/release/app-release.aab
+cat .claude/STATUS.md
+```
 
-# Check git status
+**2. Check Recent Changes**
+```bash
 git status
-
-# Review recent work
-git log --oneline -5
+git diff
 ```
 
-**2. Verify Environment**
-```bash
-# Flutter health check
-flutter doctor
+**3. Current State**
+- Currency migration COMPLETE
+- 17 occurrences migrated across 7 files
+- 8 remaining occurrences are intentional (debug/comments/data values)
 
-# Firebase connection
-firebase projects:list
-
-# Current version
-grep "version:" pubspec.yaml
+**4. Last Grep Result**
 ```
-
-**3. Resume Work**
-- If build missing: Run `flutter clean && flutter build appbundle --release`
-- If on Play Console step: Continue with upload process
-- If testing: Check Play Console for feedback
-
-**4. Quick Context**
-- Last successful build: 2025-10-26 13:08
-- Ready for: Play Console internal testing upload
-- Next action: Upload APK to Play Console
+lib/screens/groups/group_settings_screen.dart:2  (currency picker)
+lib/screens/email_transactions/email_transactions_screen.dart:1  (debug print)
+lib/screens/sms_expenses/sms_expenses_screen.dart:1  (default fallback)
+lib/screens/account/account_screen.dart:1  (static label)
+lib/screens/personal/sms_processing_stats_screen.dart:1  (comment)
+lib/screens/personal/processing_stats_screen.dart:1  (comment)
+lib/screens/personal/bill_upload_screen.dart:1  (debug print)
+```
 
 ---
 
-## 📚 Quick Reference
-
-### Important Files
-- `CLAUDE.md` - Project overview and guidelines
-- `README.md` - Setup and commands
-- `PLAYSTORE_RELEASE.md` - Play Store release guide
-- `.claude/GOOGLE_PLAY_CONSOLE_GUIDE.md` - Play Console detailed guide
-- `play_store_testers.csv` - Internal tester list
-
-### Key Commands
-```bash
-# Build release
-flutter build appbundle --release
-
-# Check logs
-firebase functions:log -n 10
-
-# View bugs
-/list-bugs
-
-# Update this status
-nano .claude/STATUS.md
-```
-
-### Important URLs
-- **Play Console:** https://play.google.com/console
-- **Firebase Console:** https://console.firebase.google.com
-- **GitHub Issues:** https://github.com/blrtechpub-droid/spendpal/issues
-
----
-
-## 💡 Notes
-
-### For Claude Code
-When resuming this project after any interruption:
-1. Read this file first to understand current state
-2. Check git log for recent changes
-3. Verify build artifacts exist before proceeding
-4. Always confirm version numbers before any release actions
-
-### Update This File
-- After completing major tasks
-- Before ending work sessions
-- After important decisions
-- When blocked or waiting on external factors
-- After crashes or unexpected interruptions
-
----
-
-**Status File Version:** 1.0
-**Template:** SpendPal Project Status Tracker
+**Status File Version:** 3.2
+**Last Session:** Currency Migration - Complete
+**Ready for:** Testing currency display across the app

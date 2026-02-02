@@ -7,6 +7,7 @@ import 'package:spendpal/services/transaction_display_service.dart';
 import 'package:spendpal/theme/app_theme.dart';
 import 'package:spendpal/widgets/transaction_categorization_dialog.dart';
 import 'package:spendpal/widgets/tracker_badge_widget.dart';
+import 'package:spendpal/utils/currency_utils.dart';
 
 /// Unified pending transactions screen with deduplication
 /// Shows combined SMS + Email transactions with smart merge badges
@@ -367,7 +368,7 @@ class _PendingTransactionsReviewScreenState
                   ),
                   // Amount
                   Text(
-                    '₹${amount.toStringAsFixed(2)}',
+                    context.formatCurrency(amount),
                     style: TextStyle(
                       color: sourceColor,
                       fontSize: 18,
@@ -419,6 +420,7 @@ class _PendingTransactionsReviewScreenState
                     confidence: transaction.trackerConfidence,
                     userId: userId,
                     compact: true,
+                    transaction: transaction, // Pass transaction for create tracker functionality
                   ),
                 ],
               ),
@@ -546,7 +548,7 @@ class _PendingTransactionsReviewScreenState
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _buildDetailRow('Merchant', transaction.merchant, theme),
-                  _buildDetailRow('Amount', '₹${transaction.amount.toStringAsFixed(2)}', theme),
+                  _buildDetailRow('Amount', context.formatCurrency(transaction.amount), theme),
                   _buildDetailRow(
                     'Date',
                     DateFormat('dd MMM yyyy, hh:mm a').format(transaction.transactionDate),

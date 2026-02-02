@@ -4,11 +4,63 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import 'package:spendpal/screens/expense/expense_screen.dart';
 import 'package:spendpal/theme/app_theme.dart';
+import 'package:fl_chart/fl_chart.dart';
+import 'package:spendpal/screens/groups/group_charts_screen.dart';
+import 'package:spendpal/models/expense_comment_model.dart';
+import 'package:spendpal/utils/currency_utils.dart';
 
-class ExpenseDetailScreen extends StatelessWidget {
+class ExpenseDetailScreen extends StatefulWidget {
   final String expenseId;
 
   const ExpenseDetailScreen({Key? key, required this.expenseId}) : super(key: key);
+
+  @override
+  State<ExpenseDetailScreen> createState() => _ExpenseDetailScreenState();
+}
+
+class _ExpenseDetailScreenState extends State<ExpenseDetailScreen> {
+  final TextEditingController _commentController = TextEditingController();
+
+  @override
+  void dispose() {
+    _commentController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _postComment() async {
+    final commentText = _commentController.text.trim();
+    if (commentText.isEmpty) return;
+
+    final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+    if (currentUserId == null) return;
+
+    try {
+      await FirebaseFirestore.instance
+          .collection('expenses')
+          .doc(widget.expenseId)
+          .collection('comments')
+          .add({
+        'expenseId': widget.expenseId,
+        'userId': currentUserId,
+        'text': commentText,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      _commentController.clear();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Comment added')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to add comment: $e')),
+        );
+      }
+    }
+  }
 
   IconData _getCategoryIcon(String category) {
     switch (category.toLowerCase()) {
@@ -41,6 +93,417 @@ class ExpenseDetailScreen extends StatelessWidget {
         return Colors.green;
       default:
         return Colors.grey;
+    }
+  }
+
+  Widget _buildSpendingTrends(BuildContext context, ThemeData theme, String category, String? groupId) {
+    // Calculate date 6 months ago
+    final now = DateTime.now();
+    final sixMonthsAgo = DateTime(now.year, now.month - 6, now.day);
+
+    return FutureBuilder<QuerySnapshot>(
+      future: FirebaseFirestore.instance
+          .collection('expenses')
+          .where('category', isEqualTo: category)
+          .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(sixMonthsAgo))
+          .orderBy('date', descending: false)
+          .get(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Container(
+            margin: const EdgeInsets.symmetric(horizontal: 16),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: theme.cardTheme.color,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Center(
+              child: CircularProgressIndicator(),
+            ),
+          );
+        }
+
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return const SizedBox.shrink();
+        }
+
+        // Group expenses by month
+        final monthlyTotals = <String, double>{};
+        for (final doc in snapshot.data!.docs) {
+          final data = doc.data() as Map<String, dynamic>;
+          final timestamp = data['date'] as Timestamp;
+          final date = timestamp.toDate();
+          final monthKey = DateFormat('MMM yyyy').format(date);
+          final amount = (data['amount'] as num?)?.toDouble() ?? 0.0;
+
+          monthlyTotals[monthKey] = (monthlyTotals[monthKey] ?? 0.0) + amount;
+        }
+
+        if (monthlyTotals.isEmpty) {
+          return const SizedBox.shrink();
+        }
+
+        // Sort months chronologically
+        final sortedMonths = monthlyTotals.keys.toList()
+          ..sort((a, b) {
+            final dateA = DateFormat('MMM yyyy').parse(a);
+            final dateB = DateFormat('MMM yyyy').parse(b);
+            return dateA.compareTo(dateB);
+          });
+
+        // Take last 6 months only
+        final displayMonths = sortedMonths.length > 6
+            ? sortedMonths.sublist(sortedMonths.length - 6)
+            : sortedMonths;
+
+        final maxAmount = monthlyTotals.values.reduce((a, b) => a > b ? a : b);
+
+        return Container(
+          margin: const EdgeInsets.symmetric(horizontal: 16),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: theme.cardTheme.color,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Spending trends',
+                style: TextStyle(
+                  color: theme.textTheme.bodyLarge?.color,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Your $category spending over time',
+                style: TextStyle(
+                  color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
+                  fontSize: 12,
+                ),
+              ),
+              const SizedBox(height: 24),
+              // Bar chart
+              AspectRatio(
+                aspectRatio: 1.7,
+                child: BarChart(
+                  BarChartData(
+                    alignment: BarChartAlignment.spaceAround,
+                    maxY: maxAmount * 1.2,
+                    barTouchData: BarTouchData(
+                      touchTooltipData: BarTouchTooltipData(
+                        getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                          final month = displayMonths[group.x.toInt()];
+                          return BarTooltipItem(
+                            '$month\n${context.formatCurrency(rod.toY)}',
+                            TextStyle(
+                              color: theme.textTheme.bodyLarge?.color,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    titlesData: FlTitlesData(
+                      show: true,
+                      bottomTitles: AxisTitles(
+                        sideTitles: SideTitles(
+                          showTitles: true,
+                          getTitlesWidget: (value, meta) {
+                            final index = value.toInt();
+                            if (index >= 0 && index < displayMonths.length) {
+                              final month = displayMonths[index];
+                              // Show only month abbreviation (first 3 chars)
+                              return Padding(
+                                padding: const EdgeInsets.only(top: 8),
+                                child: Text(
+                                  month.split(' ').first,
+                                  style: TextStyle(
+                                    color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              );
+                            }
+                            return const Text('');
+                          },
+                        ),
+                      ),
+                      leftTitles: AxisTitles(
+                        sideTitles: SideTitles(
+                          showTitles: true,
+                          reservedSize: 40,
+                          getTitlesWidget: (value, meta) {
+                            return Text(
+                              '${context.currencySymbol}${(value / 1000).toStringAsFixed(0)}k',
+                              style: TextStyle(
+                                color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
+                                fontSize: 10,
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      topTitles: const AxisTitles(
+                        sideTitles: SideTitles(showTitles: false),
+                      ),
+                      rightTitles: const AxisTitles(
+                        sideTitles: SideTitles(showTitles: false),
+                      ),
+                    ),
+                    borderData: FlBorderData(show: false),
+                    gridData: FlGridData(
+                      show: true,
+                      drawVerticalLine: false,
+                      horizontalInterval: maxAmount / 4,
+                      getDrawingHorizontalLine: (value) {
+                        return FlLine(
+                          color: theme.dividerTheme.color ?? Colors.grey.withValues(alpha: 0.2),
+                          strokeWidth: 1,
+                        );
+                      },
+                    ),
+                    barGroups: displayMonths.asMap().entries.map((entry) {
+                      final index = entry.key;
+                      final month = entry.value;
+                      final amount = monthlyTotals[month] ?? 0.0;
+
+                      return BarChartGroupData(
+                        x: index,
+                        barRods: [
+                          BarChartRodData(
+                            toY: amount,
+                            color: _getCategoryColor(category),
+                            width: 20,
+                            borderRadius: const BorderRadius.only(
+                              topLeft: Radius.circular(4),
+                              topRight: Radius.circular(4),
+                            ),
+                          ),
+                        ],
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              // View more charts button (only for group expenses)
+              if (groupId != null)
+                Center(
+                  child: TextButton.icon(
+                    icon: Icon(Icons.bar_chart, color: theme.colorScheme.primary),
+                    label: Text(
+                      'View more charts',
+                      style: TextStyle(color: theme.colorScheme.primary),
+                    ),
+                    onPressed: () async {
+                      // Navigate to group charts screen
+                      final groupDoc = await FirebaseFirestore.instance
+                          .collection('groups')
+                          .doc(groupId)
+                          .get();
+
+                      if (!context.mounted) return;
+
+                      if (groupDoc.exists) {
+                        final groupData = groupDoc.data() as Map<String, dynamic>;
+                        final groupName = groupData['name'] ?? 'Group';
+
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => GroupChartsScreen(
+                              groupId: groupId,
+                              groupName: groupName,
+                            ),
+                          ),
+                        );
+                      }
+                    },
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildCommentsSection(BuildContext context, ThemeData theme) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('expenses')
+          .doc(widget.expenseId)
+          .collection('comments')
+          .orderBy('createdAt', descending: false)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const SizedBox.shrink();
+        }
+
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return const SizedBox.shrink();
+        }
+
+        final comments = snapshot.data!.docs;
+
+        return Container(
+          margin: const EdgeInsets.symmetric(horizontal: 16),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: theme.cardTheme.color,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    Icons.comment,
+                    size: 20,
+                    color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Comments',
+                    style: TextStyle(
+                      color: theme.textTheme.bodyLarge?.color,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: AppTheme.tealAccent.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      '${comments.length}',
+                      style: const TextStyle(
+                        color: AppTheme.tealAccent,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              ...comments.map((doc) {
+                final data = doc.data() as Map<String, dynamic>;
+                final userId = data['userId'] ?? '';
+                final text = data['text'] ?? '';
+                final createdAt = data['createdAt'] as Timestamp?;
+
+                return FutureBuilder<DocumentSnapshot>(
+                  future: FirebaseFirestore.instance
+                      .collection('users')
+                      .doc(userId)
+                      .get(),
+                  builder: (context, userSnapshot) {
+                    String userName = 'Unknown';
+                    if (userSnapshot.hasData && userSnapshot.data!.exists) {
+                      final userData = userSnapshot.data!.data() as Map<String, dynamic>?;
+                      userName = userData?['name'] ?? 'Unknown';
+                    }
+
+                    final currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
+                    final isCurrentUser = userId == currentUserId;
+
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              color: AppTheme.tealAccent.withValues(alpha: 0.2),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Center(
+                              child: Text(
+                                userName.isNotEmpty ? userName[0].toUpperCase() : '?',
+                                style: const TextStyle(
+                                  color: AppTheme.tealAccent,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Text(
+                                      isCurrentUser ? 'You' : userName,
+                                      style: TextStyle(
+                                        color: theme.textTheme.bodyLarge?.color,
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    if (createdAt != null)
+                                      Text(
+                                        _formatCommentTime(createdAt.toDate()),
+                                        style: TextStyle(
+                                          color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.5),
+                                          fontSize: 11,
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  text,
+                                  style: TextStyle(
+                                    color: theme.textTheme.bodyLarge?.color,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                );
+              }),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  String _formatCommentTime(DateTime dateTime) {
+    final now = DateTime.now();
+    final difference = now.difference(dateTime);
+
+    if (difference.inDays > 7) {
+      return DateFormat('MMM d').format(dateTime);
+    } else if (difference.inDays > 0) {
+      return '${difference.inDays}d ago';
+    } else if (difference.inHours > 0) {
+      return '${difference.inHours}h ago';
+    } else if (difference.inMinutes > 0) {
+      return '${difference.inMinutes}m ago';
+    } else {
+      return 'Just now';
     }
   }
 
@@ -99,15 +562,49 @@ class ExpenseDetailScreen extends StatelessWidget {
               );
 
               if (confirm == true) {
-                await FirebaseFirestore.instance
-                    .collection('expenses')
-                    .doc(expenseId)
-                    .delete();
+                // Show loading dialog
                 if (context.mounted) {
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Expense deleted')),
+                  showDialog(
+                    context: context,
+                    barrierDismissible: false,
+                    builder: (context) => const Center(
+                      child: CircularProgressIndicator(),
+                    ),
                   );
+                }
+
+                try {
+                  // Delete the expense
+                  await FirebaseFirestore.instance
+                      .collection('expenses')
+                      .doc(widget.expenseId)
+                      .delete();
+
+                  if (context.mounted) {
+                    // Close loading dialog
+                    Navigator.pop(context);
+                    // Close detail screen
+                    Navigator.pop(context);
+                    // Show success message
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Expense deleted successfully'),
+                        backgroundColor: Colors.green,
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  if (context.mounted) {
+                    // Close loading dialog
+                    Navigator.pop(context);
+                    // Show error message
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Error deleting expense: $e'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
                 }
               }
             },
@@ -118,7 +615,7 @@ class ExpenseDetailScreen extends StatelessWidget {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) => AddExpenseScreen(expenseId: expenseId),
+                  builder: (_) => AddExpenseScreen(expenseId: widget.expenseId),
                 ),
               );
             },
@@ -128,7 +625,7 @@ class ExpenseDetailScreen extends StatelessWidget {
       body: StreamBuilder<DocumentSnapshot>(
         stream: FirebaseFirestore.instance
             .collection('expenses')
-            .doc(expenseId)
+            .doc(widget.expenseId)
             .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
@@ -190,7 +687,7 @@ class ExpenseDetailScreen extends StatelessWidget {
                       const SizedBox(height: 8),
                       // Amount
                       Text(
-                        '₹${amount.toStringAsFixed(2)}',
+                        context.formatCurrency(amount),
                         style: TextStyle(
                           color: theme.textTheme.bodyLarge?.color,
                           fontSize: 32,
@@ -277,7 +774,7 @@ class ExpenseDetailScreen extends StatelessWidget {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      '$displayName paid ₹${amount.toStringAsFixed(2)}',
+                                      '$displayName paid ${context.formatCurrency(amount)}',
                                       style: TextStyle(
                                         color: theme.textTheme.bodyLarge?.color,
                                         fontSize: 16,
@@ -355,7 +852,7 @@ class ExpenseDetailScreen extends StatelessWidget {
                                         ),
                                       ),
                                       Text(
-                                        '₹${shareAmount.toStringAsFixed(2)}',
+                                        context.formatCurrency(shareAmount),
                                         style: TextStyle(
                                           color: statusColor,
                                           fontSize: 16,
@@ -369,7 +866,7 @@ class ExpenseDetailScreen extends StatelessWidget {
                             );
                           },
                         );
-                      }).toList(),
+                      }),
                     ],
                   ),
                 ),
@@ -405,43 +902,13 @@ class ExpenseDetailScreen extends StatelessWidget {
 
                 const SizedBox(height: 24),
 
-                // Spending trends placeholder
-                Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 16),
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: theme.cardTheme.color,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Spending trends',
-                        style: TextStyle(
-                          color: theme.textTheme.bodyLarge?.color,
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      Center(
-                        child: TextButton.icon(
-                          icon: Icon(Icons.bar_chart, color: theme.colorScheme.primary),
-                          label: Text(
-                            'View more charts',
-                            style: TextStyle(color: theme.colorScheme.primary),
-                          ),
-                          onPressed: () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Charts feature coming soon')),
-                            );
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+                // Spending trends chart
+                _buildSpendingTrends(context, theme, category, data['groupId'] as String?),
+
+                const SizedBox(height: 24),
+
+                // Comments section
+                _buildCommentsSection(context, theme),
 
                 const SizedBox(height: 100), // Space for comment input
               ],
@@ -469,6 +936,7 @@ class ExpenseDetailScreen extends StatelessWidget {
           children: [
             Expanded(
               child: TextField(
+                controller: _commentController,
                 style: TextStyle(color: theme.textTheme.bodyLarge?.color),
                 decoration: InputDecoration(
                   hintText: 'Add a comment',
@@ -494,25 +962,15 @@ class ExpenseDetailScreen extends StatelessWidget {
                   ),
                   contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 ),
-                onSubmitted: (value) {
-                  if (value.trim().isNotEmpty) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Comments feature coming soon')),
-                    );
-                  }
-                },
+                onSubmitted: (value) => _postComment(),
               ),
             ),
             IconButton(
               icon: Icon(
                 Icons.send,
-                color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
+                color: AppTheme.tealAccent,
               ),
-              onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Comments feature coming soon')),
-                );
-              },
+              onPressed: _postComment,
             ),
           ],
         ),

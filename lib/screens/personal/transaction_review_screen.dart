@@ -7,6 +7,7 @@ import 'package:spendpal/models/transaction_model.dart';
 import 'package:spendpal/models/expense_model.dart';
 import 'package:spendpal/models/group_model.dart';
 import 'package:spendpal/models/user_model.dart';
+import 'package:spendpal/utils/currency_utils.dart';
 import 'package:intl/intl.dart';
 
 class TransactionReviewScreen extends StatefulWidget {
@@ -593,7 +594,7 @@ class _TransactionReviewScreenState extends State<TransactionReviewScreen> {
           ],
         ),
         trailing: Text(
-          '₹${transaction.amount.toStringAsFixed(2)}',
+          context.formatCurrency(transaction.amount),
           style: TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.bold,
@@ -631,7 +632,7 @@ class _TransactionReviewScreenState extends State<TransactionReviewScreen> {
                     ),
                   ),
                   Text(
-                    '₹${totalAmount.toStringAsFixed(2)}',
+                    context.formatCurrency(totalAmount),
                     style: const TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,

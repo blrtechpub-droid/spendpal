@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:spendpal/models/money_tracker_model.dart';
+import 'package:spendpal/services/account_tracker_service.dart';
 import 'package:spendpal/theme/app_theme.dart';
 
 class AddCreditCardScreen extends StatefulWidget {
@@ -95,6 +96,13 @@ class _AddCreditCardScreenState extends State<AddCreditCardScreen> {
         // Create new card
         cardData['createdAt'] = FieldValue.serverTimestamp();
         await _firestore.collection('moneyAccounts').add(cardData);
+
+        // Automatically create tracker for this credit card if possible
+        await AccountTrackerService.createTrackerForMoneyAccount(
+          userId: currentUser.uid,
+          accountName: cardName,
+          accountType: 'credit_card',
+        );
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(

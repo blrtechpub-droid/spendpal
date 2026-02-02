@@ -11,6 +11,19 @@ class InvestmentAsset {
   final String? schemeCode; // For mutual funds: AMFI scheme code
   final String? platform; // Investment platform (e.g., "zerodha", "groww", "5paisa", "etrade")
   final String? trackerId; // Link to AccountTracker for auto-import from emails/SMS
+
+  // FD/RD/PPF/EPF/NPS specific fields
+  final String? bankName; // Bank/Institution name for FD/RD/PPF/EPF/NPS
+  final String? accountNumber; // Account number for FD/RD/PPF/EPF/NPS
+  final double? interestRate; // Interest rate (%) for FD/RD
+  final DateTime? maturityDate; // Maturity date for FD/RD
+  final int? tenureMonths; // Tenure in months for FD/RD
+
+  // Gold specific fields
+  final String? goldForm; // 'physical', 'digital', 'etf' for gold
+  final double? weightGrams; // Weight in grams for physical/digital gold
+  final String? purity; // '24K', '22K', '18K' for gold
+
   final String currency; // Default: 'INR'
   final List<String> tags; // User-defined tags for categorization
   final String? goalId; // Link to financial goal (future feature)
@@ -26,6 +39,14 @@ class InvestmentAsset {
     this.schemeCode,
     this.platform,
     this.trackerId,
+    this.bankName,
+    this.accountNumber,
+    this.interestRate,
+    this.maturityDate,
+    this.tenureMonths,
+    this.goldForm,
+    this.weightGrams,
+    this.purity,
     this.currency = 'INR',
     this.tags = const [],
     this.goalId,
@@ -44,6 +65,14 @@ class InvestmentAsset {
       'schemeCode': schemeCode,
       'platform': platform,
       'trackerId': trackerId,
+      'bankName': bankName,
+      'accountNumber': accountNumber,
+      'interestRate': interestRate,
+      'maturityDate': maturityDate != null ? Timestamp.fromDate(maturityDate!) : null,
+      'tenureMonths': tenureMonths,
+      'goldForm': goldForm,
+      'weightGrams': weightGrams,
+      'purity': purity,
       'currency': currency,
       'tags': tags,
       'goalId': goalId,
@@ -64,6 +93,14 @@ class InvestmentAsset {
       schemeCode: data['schemeCode'],
       platform: data['platform'],
       trackerId: data['trackerId'],
+      bankName: data['bankName'],
+      accountNumber: data['accountNumber'],
+      interestRate: data['interestRate']?.toDouble(),
+      maturityDate: (data['maturityDate'] as Timestamp?)?.toDate(),
+      tenureMonths: data['tenureMonths'],
+      goldForm: data['goldForm'],
+      weightGrams: data['weightGrams']?.toDouble(),
+      purity: data['purity'],
       currency: data['currency'] ?? 'INR',
       tags: List<String>.from(data['tags'] ?? []),
       goalId: data['goalId'],
@@ -82,6 +119,14 @@ class InvestmentAsset {
     String? schemeCode,
     String? platform,
     String? trackerId,
+    String? bankName,
+    String? accountNumber,
+    double? interestRate,
+    DateTime? maturityDate,
+    int? tenureMonths,
+    String? goldForm,
+    double? weightGrams,
+    String? purity,
     String? currency,
     List<String>? tags,
     String? goalId,
@@ -97,6 +142,14 @@ class InvestmentAsset {
       schemeCode: schemeCode ?? this.schemeCode,
       platform: platform ?? this.platform,
       trackerId: trackerId ?? this.trackerId,
+      bankName: bankName ?? this.bankName,
+      accountNumber: accountNumber ?? this.accountNumber,
+      interestRate: interestRate ?? this.interestRate,
+      maturityDate: maturityDate ?? this.maturityDate,
+      tenureMonths: tenureMonths ?? this.tenureMonths,
+      goldForm: goldForm ?? this.goldForm,
+      weightGrams: weightGrams ?? this.weightGrams,
+      purity: purity ?? this.purity,
       currency: currency ?? this.currency,
       tags: tags ?? this.tags,
       goalId: goalId ?? this.goalId,

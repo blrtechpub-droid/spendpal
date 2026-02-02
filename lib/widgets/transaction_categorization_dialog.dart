@@ -49,6 +49,7 @@ class TransactionCategorizationDialog extends StatefulWidget {
   final double amount;
   final TransactionType transactionType;
   final String? description;
+  final String? trackerId; // Tracker that matched this transaction
 
   const TransactionCategorizationDialog({
     super.key,
@@ -56,6 +57,7 @@ class TransactionCategorizationDialog extends StatefulWidget {
     required this.amount,
     required this.transactionType,
     this.description,
+    this.trackerId,
   });
 
   @override
@@ -215,6 +217,153 @@ class _TransactionCategorizationDialogState
     Navigator.pop(context, result);
   }
 
+  // Build category option card
+  Widget _buildCategoryOption(Map<String, dynamic> option, ThemeData theme) {
+    final isSelected = _selectedCategory == option['value'];
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: InkWell(
+        onTap: () {
+          setState(() {
+            _selectedCategory = option['value'] as String;
+            // Reset account selection when category changes
+            _selectedAccountId = null;
+            _selectedAccountSource = null;
+            _selectedAccount = null;
+          });
+        },
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? (option['color'] as Color).withValues(alpha: 0.15)
+                : theme.cardTheme.color,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isSelected
+                  ? (option['color'] as Color)
+                  : theme.dividerTheme.color ?? Colors.grey.withValues(alpha: 0.3),
+              width: isSelected ? 2 : 1,
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                option['icon'] as IconData,
+                color: option['color'] as Color,
+                size: 24,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      option['label'] as String,
+                      style: TextStyle(
+                        color: theme.textTheme.bodyLarge?.color,
+                        fontSize: 15,
+                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                      ),
+                    ),
+                    Text(
+                      option['description'] as String,
+                      style: TextStyle(
+                        color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.6),
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (isSelected)
+                Icon(
+                  Icons.check_circle,
+                  color: option['color'] as Color,
+                  size: 24,
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Build category selection section
+  Widget _buildCategorySelection(ThemeData theme) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          'Select Category',
+          style: TextStyle(
+            color: theme.textTheme.bodyMedium?.color,
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 12),
+        ..._getCategoryOptions().map((option) => _buildCategoryOption(option, theme)),
+      ],
+    );
+  }
+
+  // Build account selection section
+  Widget _buildAccountSelection() {
+    if (!_shouldShowAccountDropdown()) return const SizedBox.shrink();
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const SizedBox(height: 16),
+        AccountSelectionDropdown(
+          selectedAccountId: _selectedAccountId,
+          onAccountSelected: (accountId, source, account) {
+            setState(() {
+              _selectedAccountId = accountId;
+              _selectedAccountSource = source;
+              _selectedAccount = account;
+            });
+          },
+          includeInvestments: _shouldIncludeInvestments(),
+          trackerId: widget.trackerId, // Filter by matched tracker
+          label: 'Select Account',
+          icon: Icons.account_balance_wallet,
+          required: true,
+        ),
+      ],
+    );
+  }
+
+  // Build notes field section
+  Widget _buildNotesField(ThemeData theme) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const SizedBox(height: 16),
+        TextFormField(
+          controller: _notesController,
+          decoration: InputDecoration(
+            labelText: 'Notes (Optional)',
+            hintText: 'Add any additional notes',
+            prefixIcon: const Icon(Icons.notes),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            filled: true,
+            fillColor: theme.cardTheme.color,
+          ),
+          style: TextStyle(color: theme.textTheme.bodyLarge?.color),
+          maxLines: 2,
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -222,6 +371,7 @@ class _TransactionCategorizationDialogState
 
     return AlertDialog(
       backgroundColor: theme.cardTheme.color,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
       title: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
@@ -267,137 +417,25 @@ class _TransactionCategorizationDialogState
           ],
         ],
       ),
-      content: Form(
-        key: _formKey,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Category Selection
-              Text(
-                'Select Category',
-                style: TextStyle(
-                  color: theme.textTheme.bodyMedium?.color,
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                ),
+      content: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.5,
+        ),
+        child: SizedBox(
+          width: double.maxFinite,
+          child: Form(
+            key: _formKey,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildCategorySelection(theme),
+                  _buildAccountSelection(),
+                  _buildNotesField(theme),
+                ],
               ),
-              const SizedBox(height: 12),
-              ..._getCategoryOptions().map((option) {
-                final isSelected = _selectedCategory == option['value'];
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: InkWell(
-                    onTap: () {
-                      setState(() {
-                        _selectedCategory = option['value'] as String;
-                        // Reset account selection when category changes
-                        _selectedAccountId = null;
-                        _selectedAccountSource = null;
-                        _selectedAccount = null;
-                      });
-                    },
-                    borderRadius: BorderRadius.circular(12),
-                    child: Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: isSelected
-                            ? (option['color'] as Color).withValues(alpha: 0.15)
-                            : theme.cardTheme.color,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: isSelected
-                              ? (option['color'] as Color)
-                              : theme.dividerTheme.color ??
-                                  Colors.grey.withValues(alpha: 0.3),
-                          width: isSelected ? 2 : 1,
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            option['icon'] as IconData,
-                            color: option['color'] as Color,
-                            size: 24,
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  option['label'] as String,
-                                  style: TextStyle(
-                                    color: theme.textTheme.bodyLarge?.color,
-                                    fontSize: 15,
-                                    fontWeight: isSelected
-                                        ? FontWeight.bold
-                                        : FontWeight.normal,
-                                  ),
-                                ),
-                                Text(
-                                  option['description'] as String,
-                                  style: TextStyle(
-                                    color: theme.textTheme.bodyMedium?.color
-                                        ?.withValues(alpha: 0.6),
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          if (isSelected)
-                            Icon(
-                              Icons.check_circle,
-                              color: option['color'] as Color,
-                              size: 24,
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
-                );
-              }),
-
-              // Account Selection (conditional)
-              if (_shouldShowAccountDropdown()) ...[
-                const SizedBox(height: 16),
-                AccountSelectionDropdown(
-                  selectedAccountId: _selectedAccountId,
-                  onAccountSelected: (accountId, source, account) {
-                    setState(() {
-                      _selectedAccountId = accountId;
-                      _selectedAccountSource = source;
-                      _selectedAccount = account;
-                    });
-                  },
-                  includeInvestments: _shouldIncludeInvestments(),
-                  label: 'Select Account',
-                  icon: Icons.account_balance_wallet,
-                  required: true,
-                ),
-              ],
-
-              // Notes Field
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _notesController,
-                decoration: InputDecoration(
-                  labelText: 'Notes (Optional)',
-                  hintText: 'Add any additional notes',
-                  prefixIcon: const Icon(Icons.notes),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  filled: true,
-                  fillColor: theme.cardTheme.color,
-                ),
-                style: TextStyle(color: theme.textTheme.bodyLarge?.color),
-                maxLines: 2,
-              ),
-            ],
+            ),
           ),
         ),
       ),

@@ -249,12 +249,13 @@ class PortfolioService {
           .doc(userId)
           .collection('investmentTransactions')
           .where('assetId', isEqualTo: assetId)
-          .orderBy('date', descending: false)
           .get();
 
+      // Sort transactions manually to avoid index requirement
       final transactions = txnSnapshot.docs
           .map((doc) => InvestmentTransaction.fromFirestore(doc))
-          .toList();
+          .toList()
+        ..sort((a, b) => a.date.compareTo(b.date));
 
       // Calculate XIRR
       double? xirr;

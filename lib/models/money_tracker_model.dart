@@ -4,10 +4,19 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 class MoneyTrackerAccount {
   final String accountId;
   final String userId;
-  final String accountType; // 'bank', 'credit_card'
+  final String accountType; // 'bank', 'credit_card', 'wallet', 'loan'
   final String accountName;
-  final double balance; // Current balance for bank, available credit for credit card
-  final double? creditLimit; // Only for credit cards
+  final double balance; // Current balance for bank, outstanding principal for loan, spent amount for credit card
+  final double? creditLimit; // Only for credit cards (total limit) or loans (original principal)
+  final String? trackerId; // Linked Account Tracker for auto-sync from SMS/Email
+
+  // Loan-specific fields
+  final String? loanType; // 'personal', 'home', 'car', 'education', 'other'
+  final double? interestRate; // Interest rate percentage for loans
+  final double? emiAmount; // Monthly EMI for loans
+  final DateTime? loanStartDate; // Loan start date
+  final int? tenureMonths; // Loan tenure in months
+
   final DateTime lastUpdated;
   final DateTime createdAt;
 
@@ -18,6 +27,12 @@ class MoneyTrackerAccount {
     required this.accountName,
     required this.balance,
     this.creditLimit,
+    this.trackerId,
+    this.loanType,
+    this.interestRate,
+    this.emiAmount,
+    this.loanStartDate,
+    this.tenureMonths,
     required this.lastUpdated,
     required this.createdAt,
   });
@@ -30,6 +45,12 @@ class MoneyTrackerAccount {
       'accountName': accountName,
       'balance': balance,
       'creditLimit': creditLimit,
+      'trackerId': trackerId,
+      'loanType': loanType,
+      'interestRate': interestRate,
+      'emiAmount': emiAmount,
+      'loanStartDate': loanStartDate != null ? Timestamp.fromDate(loanStartDate!) : null,
+      'tenureMonths': tenureMonths,
       'lastUpdated': Timestamp.fromDate(lastUpdated),
       'createdAt': Timestamp.fromDate(createdAt),
     };
@@ -44,8 +65,48 @@ class MoneyTrackerAccount {
       accountName: data['accountName'] ?? '',
       balance: (data['balance'] as num?)?.toDouble() ?? 0.0,
       creditLimit: (data['creditLimit'] as num?)?.toDouble(),
+      trackerId: data['trackerId'],
+      loanType: data['loanType'],
+      interestRate: (data['interestRate'] as num?)?.toDouble(),
+      emiAmount: (data['emiAmount'] as num?)?.toDouble(),
+      loanStartDate: (data['loanStartDate'] as Timestamp?)?.toDate(),
+      tenureMonths: data['tenureMonths'],
       lastUpdated: (data['lastUpdated'] as Timestamp?)?.toDate() ?? DateTime.now(),
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+    );
+  }
+
+  MoneyTrackerAccount copyWith({
+    String? accountId,
+    String? userId,
+    String? accountType,
+    String? accountName,
+    double? balance,
+    double? creditLimit,
+    String? trackerId,
+    String? loanType,
+    double? interestRate,
+    double? emiAmount,
+    DateTime? loanStartDate,
+    int? tenureMonths,
+    DateTime? lastUpdated,
+    DateTime? createdAt,
+  }) {
+    return MoneyTrackerAccount(
+      accountId: accountId ?? this.accountId,
+      userId: userId ?? this.userId,
+      accountType: accountType ?? this.accountType,
+      accountName: accountName ?? this.accountName,
+      balance: balance ?? this.balance,
+      creditLimit: creditLimit ?? this.creditLimit,
+      trackerId: trackerId ?? this.trackerId,
+      loanType: loanType ?? this.loanType,
+      interestRate: interestRate ?? this.interestRate,
+      emiAmount: emiAmount ?? this.emiAmount,
+      loanStartDate: loanStartDate ?? this.loanStartDate,
+      tenureMonths: tenureMonths ?? this.tenureMonths,
+      lastUpdated: lastUpdated ?? this.lastUpdated,
+      createdAt: createdAt ?? this.createdAt,
     );
   }
 }

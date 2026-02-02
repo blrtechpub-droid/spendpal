@@ -8,6 +8,8 @@ class GroupModel {
   final DateTime createdAt;
   final List<String> members;
   final String? photo; // ✅ Optional group photo URL
+  final String currency; // Currency symbol (₹, $, €, £, etc.)
+  final String? notes; // Group whiteboard notes
 
   GroupModel({
     required this.groupId,
@@ -17,6 +19,8 @@ class GroupModel {
     required this.createdAt,
     required this.members,
     this.photo,
+    this.currency = '₹', // Default to Indian Rupee
+    this.notes,
   });
 
   Map<String, dynamic> toMap() {
@@ -28,6 +32,8 @@ class GroupModel {
       'createdAt': createdAt.toIso8601String(),
       'members': members,
       'photo': photo, // ✅ Save photo if provided
+      'currency': currency,
+      'notes': notes,
     };
   }
 
@@ -43,6 +49,8 @@ class GroupModel {
       createdBy: data['createdBy'] ?? '',
       members: List<String>.from(data['members'] ?? []),
       photo: data['photo'], // ✅ Read photo if available
+      currency: data['currency'] ?? '₹', // Default to ₹
+      notes: data['notes'],
     );
   }
 
@@ -54,6 +62,8 @@ class GroupModel {
       createdBy: map['createdBy'],
       createdAt: DateTime.parse(map['createdAt']),
       members: List<String>.from(map['members']),
+      currency: map['currency'] ?? '₹',
+      notes: map['notes'],
     );
   }
 }

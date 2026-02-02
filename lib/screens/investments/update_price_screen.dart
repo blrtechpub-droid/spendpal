@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:spendpal/services/portfolio_service.dart';
 import 'package:spendpal/services/investment_transaction_service.dart';
 import 'package:spendpal/models/investment_asset.dart';
+import 'package:spendpal/utils/currency_utils.dart';
 
 class UpdatePriceScreen extends StatefulWidget {
   final String? assetId;
@@ -334,7 +335,7 @@ class _UpdatePriceScreenState extends State<UpdatePriceScreen> {
                         style: theme.textTheme.bodyMedium,
                       ),
                       Text(
-                        '₹${_currentPrice!.toStringAsFixed(2)}',
+                        context.formatCurrency(_currentPrice!),
                         style: theme.textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.bold,
                         ),

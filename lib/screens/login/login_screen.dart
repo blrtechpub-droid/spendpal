@@ -31,9 +31,11 @@ Future<void> _signInWithGoogle() async {
     // Get GoogleSignIn instance
     final googleSignIn = GoogleSignIn.instance;
 
-    // Initialize GoogleSignIn (required for v7.x)
-    print('🔵 Step 2: Initializing GoogleSignIn...');
-    await googleSignIn.initialize();
+    // Initialize GoogleSignIn with Web client ID for Firebase (required for v7.x)
+    print('🔵 Step 2: Initializing GoogleSignIn with serverClientId...');
+    await googleSignIn.initialize(
+      serverClientId: '525963188971-lqi5je8o1iirnafqn5snok22omrin97m.apps.googleusercontent.com',
+    );
     print('✅ Step 2: Initialized successfully');
 
     // Authenticate the user

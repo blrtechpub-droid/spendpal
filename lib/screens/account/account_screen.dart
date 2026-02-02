@@ -8,9 +8,11 @@ import 'package:spendpal/screens/account/features_screen.dart';
 import 'package:spendpal/screens/account/account_management_screen.dart';
 import 'package:spendpal/screens/analytics/analytics_screen.dart';
 import 'package:spendpal/screens/import/splitwise_import_screen.dart';
+import 'package:spendpal/screens/savings/savings_goals_screen.dart';
 import 'package:spendpal/services/currency_service.dart';
 import 'package:spendpal/theme/app_theme.dart';
 import 'package:spendpal/providers/theme_provider.dart';
+import 'package:spendpal/providers/currency_provider.dart';
 
 class AccountScreen extends StatefulWidget {
   const AccountScreen({super.key});
@@ -269,6 +271,20 @@ class _AccountScreenState extends State<AccountScreen> {
               ),
               _buildListTile(
                 context,
+                icon: Icons.savings,
+                title: 'Savings Goals',
+                subtitle: 'Track and manage your savings goals',
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const SavingsGoalsScreen(),
+                    ),
+                  );
+                },
+              ),
+              _buildListTile(
+                context,
                 icon: Icons.notifications,
                 title: 'Notifications',
                 subtitle: 'Manage notification preferences',
@@ -351,6 +367,38 @@ class _AccountScreenState extends State<AccountScreen> {
                         return Colors.grey.withValues(alpha: 0.3);
                       }),
                     ),
+                  );
+                },
+              ),
+              // Currency selector
+              Consumer<CurrencyProvider>(
+                builder: (context, currencyProvider, _) {
+                  return ListTile(
+                    leading: Icon(
+                      Icons.attach_money,
+                      color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
+                    ),
+                    title: Text(
+                      'Currency',
+                      style: TextStyle(
+                        color: theme.textTheme.bodyLarge?.color,
+                        fontSize: 16,
+                      ),
+                    ),
+                    subtitle: Text(
+                      '${currencyProvider.selectedCurrency.name} (${currencyProvider.selectedCurrency.symbol})',
+                      style: TextStyle(
+                        color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
+                        fontSize: 14,
+                      ),
+                    ),
+                    trailing: Icon(
+                      Icons.chevron_right,
+                      color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
+                    ),
+                    onTap: () {
+                      Navigator.pushNamed(context, '/currency_selector');
+                    },
                   );
                 },
               ),

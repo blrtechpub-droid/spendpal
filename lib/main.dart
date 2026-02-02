@@ -14,13 +14,22 @@ import 'screens/qr/qr_scanner_screen.dart';
 import 'screens/investments/investments_screen.dart';
 import 'screens/investments/update_price_screen.dart';
 import 'screens/investments/asset_detail_screen.dart';
+import 'screens/investments/add_investment_transaction_screen.dart';
+import 'screens/investments/add_asset_screen.dart';
 import 'screens/investment/investment_sms_review_screen.dart';
 import 'screens/email_transactions/email_transactions_screen.dart';
+import 'screens/budget/budget_screen.dart';
+import 'screens/personal/sms_processing_stats_screen.dart';
+import 'screens/personal/processing_stats_screen.dart';
+import 'screens/settings/currency_selector_screen.dart';
+import 'models/local_transaction_model.dart';
 import 'theme/app_theme.dart';
 import 'providers/theme_provider.dart';
+import 'providers/currency_provider.dart';
 
 // SMS service (automatically uses stub on iOS, real implementation on Android)
 import 'services/sms_listener_service.dart';
+// import 'services/email_auto_sync_service.dart'; // TODO: Complete implementation
 
 
 void main() async {
@@ -58,9 +67,19 @@ void main() async {
     });
   }
 
+  // TODO: Initialize email auto-sync service when implementation is complete
+  // EmailAutoSyncService().initialize().then((_) {
+  //   print('✅ Email auto-sync service initialized');
+  // }).catchError((e) {
+  //   print('❌ Email auto-sync error: $e');
+  // });
+
   runApp(
-    ChangeNotifierProvider(
-      create: (_) => ThemeProvider(),
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => ThemeProvider()),
+        ChangeNotifierProvider(create: (_) => CurrencyProvider()),
+      ],
       child: const MyApp(),
     ),
   );
@@ -87,10 +106,27 @@ class MyApp extends StatelessWidget {
             '/home': (context) => const HomeScreen(),
             '/add_expense': (context) => const AddExpenseScreen(),
             '/scan_qr': (context) => const QRScannerScreen(),
+            '/budget': (context) => const BudgetScreen(),
             '/investments': (context) => const InvestmentsScreen(),
             '/update_price': (context) => const UpdatePriceScreen(),
+            '/add_asset': (context) {
+              final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+              return AddAssetScreen(
+                asset: args?['asset'],
+                isEdit: args?['isEdit'] ?? false,
+              );
+            },
+            '/add_investment_transaction': (context) => const AddInvestmentTransactionScreen(),
             '/investment_sms_review': (context) => const InvestmentSmsReviewScreen(),
             '/email_transactions': (context) => const EmailTransactionsScreen(),
+            '/sms_processing_stats': (context) => const SmsProcessingStatsScreen(),
+            '/processing_stats': (context) {
+              final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+              return ProcessingStatsScreen(
+                initialSource: args?['source'],
+              );
+            },
+            '/currency_selector': (context) => const CurrencySelectorScreen(),
             '/asset_detail': (context) {
               final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
               return AssetDetailScreen(

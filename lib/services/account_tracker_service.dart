@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:uuid/uuid.dart';
 import '../models/account_tracker_model.dart';
+import '../models/money_tracker_model.dart';
 import '../config/tracker_registry.dart';
 
 /// Service for managing account trackers
@@ -9,6 +10,128 @@ import '../config/tracker_registry.dart';
 class AccountTrackerService {
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   static const _uuid = Uuid();
+
+  /// Map TrackerType to MoneyAccount accountType
+  /// Returns null if tracker type should not create a Money Account
+  static String? _mapTrackerTypeToAccountType(TrackerType type) {
+    switch (type) {
+      case TrackerType.banking:
+        return 'bank';
+      case TrackerType.creditCard:
+        return 'credit_card';
+      case TrackerType.digitalWallet:
+        return 'wallet';
+      case TrackerType.loan:
+        return 'loan';
+      case TrackerType.investment:
+      case TrackerType.governmentScheme:
+      case TrackerType.insurance:
+        return null; // Skip Money Account creation for these types
+    }
+  }
+
+  /// Create a Money Account automatically when tracker is created
+  static Future<bool> _createMoneyAccountForTracker({
+    required String userId,
+    required AccountTrackerModel tracker,
+  }) async {
+    try {
+      final accountType = _mapTrackerTypeToAccountType(tracker.type);
+
+      // Skip if no mapping exists
+      if (accountType == null) {
+        print('ℹ️ Skipping Money Account creation for tracker type: ${tracker.type.name}');
+        return true;
+      }
+
+      final moneyAccount = MoneyTrackerAccount(
+        accountId: _uuid.v4(),
+        userId: userId,
+        accountType: accountType,
+        accountName: tracker.name,
+        balance: 0.0, // Initial balance is ₹0
+        creditLimit: accountType == 'credit_card' ? 0.0 : null,
+        trackerId: tracker.id, // Link to the tracker
+        createdAt: DateTime.now(),
+        lastUpdated: DateTime.now(),
+      );
+
+      await _firestore
+          .collection('moneyAccounts')
+          .doc(moneyAccount.accountId)
+          .set(moneyAccount.toMap());
+
+      print('✅ Money Account created for tracker: ${tracker.name} (type: $accountType)');
+      return true;
+    } catch (e) {
+      print('❌ Error creating Money Account for tracker: $e');
+      // Don't fail tracker creation if Money Account creation fails
+      return false;
+    }
+  }
+
+  /// Detect tracker category from account name
+  /// Returns TrackerCategory if a matching template is found, null otherwise
+  static TrackerCategory? _detectTrackerCategory(String accountName) {
+    final lowerName = accountName.toLowerCase();
+
+    // Banking trackers
+    if (lowerName.contains('hdfc')) return TrackerCategory.hdfcBank;
+    if (lowerName.contains('icici')) return TrackerCategory.iciciBank;
+    if (lowerName.contains('sbi') || lowerName.contains('state bank')) return TrackerCategory.sbiBank;
+    if (lowerName.contains('axis')) return TrackerCategory.axisBank;
+    if (lowerName.contains('kotak')) return TrackerCategory.kotakBank;
+    if (lowerName.contains('yes bank')) return TrackerCategory.yesBankIndia;
+    if (lowerName.contains('indusind')) return TrackerCategory.indusIndBank;
+    if (lowerName.contains('pnb') || lowerName.contains('punjab')) return TrackerCategory.pnbBank;
+    if (lowerName.contains('standard') || lowerName.contains('chartered')) return TrackerCategory.standardChartered;
+
+    // Digital Wallets
+    if (lowerName.contains('paytm')) return TrackerCategory.paytm;
+    if (lowerName.contains('phonepe') || lowerName.contains('phone pe')) return TrackerCategory.phonePe;
+    if (lowerName.contains('gpay') || lowerName.contains('google pay')) return TrackerCategory.googlePay;
+    if (lowerName.contains('amazon pay')) return TrackerCategory.amazonPay;
+
+    return null;
+  }
+
+  /// Create a tracker automatically when Money Account is created
+  /// This is the reverse of _createMoneyAccountForTracker
+  static Future<AccountTrackerModel?> createTrackerForMoneyAccount({
+    required String userId,
+    required String accountName,
+    required String accountType,
+  }) async {
+    try {
+      // Detect which tracker category matches this account name
+      final category = _detectTrackerCategory(accountName);
+
+      if (category == null) {
+        print('ℹ️ No tracker template found for account name: $accountName');
+        return null;
+      }
+
+      // Check if tracker already exists for this category
+      final existingTrackers = await getAllTrackers(userId);
+      final alreadyExists = existingTrackers.any((t) => t.category == category);
+
+      if (alreadyExists) {
+        print('ℹ️ Tracker already exists for category: ${category.name}');
+        return null;
+      }
+
+      // Create the tracker using the template
+      print('🔄 Auto-creating tracker for Money Account: $accountName');
+      return await addTrackerFromTemplate(
+        userId: userId,
+        category: category,
+        customName: null, // Use template name
+      );
+    } catch (e) {
+      print('❌ Error creating tracker for Money Account: $e');
+      return null;
+    }
+  }
 
   /// Get all trackers for a user
   static Future<List<AccountTrackerModel>> getAllTrackers(String userId) async {
@@ -144,6 +267,13 @@ class AccountTrackerService {
           .set(tracker.toMap());
 
       print('✅ Tracker added: ${tracker.name}');
+
+      // Automatically create Money Account for this tracker
+      await _createMoneyAccountForTracker(
+        userId: userId,
+        tracker: tracker,
+      );
+
       return tracker;
     } catch (e) {
       print('❌ Error adding tracker: $e');
@@ -186,6 +316,13 @@ class AccountTrackerService {
           .set(tracker.toMap());
 
       print('✅ Custom tracker added: ${tracker.name}');
+
+      // Automatically create Money Account for this tracker
+      await _createMoneyAccountForTracker(
+        userId: userId,
+        tracker: tracker,
+      );
+
       return tracker;
     } catch (e) {
       print('❌ Error adding custom tracker: $e');

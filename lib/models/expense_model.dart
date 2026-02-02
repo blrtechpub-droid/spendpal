@@ -44,7 +44,8 @@ class ExpenseModel {
       title: data['title'] ?? '',
       amount: (data['amount'] ?? 0).toDouble(),
       paidBy: data['paidBy'] ?? '',
-      sharedWith: List<String>.from(data['sharedWith'] ?? []),
+      // Support both 'sharedWith' and 'splitWith' field names
+      sharedWith: List<String>.from(data['sharedWith'] ?? data['splitWith'] ?? []),
       date: data['date'] != null
           ? (data['date'] as Timestamp).toDate()
           : DateTime.now(),

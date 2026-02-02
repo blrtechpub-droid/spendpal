@@ -3,6 +3,7 @@ import 'package:qr_code_scanner/qr_code_scanner.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:spendpal/utils/currency_utils.dart';
 
 class QRScannerScreen extends StatefulWidget {
   const QRScannerScreen({super.key});
@@ -79,7 +80,7 @@ class _QRScannerScreenState extends State<QRScannerScreen> with SingleTickerProv
           children: [
             Text('Payee: $payeeName'),
             Text('UPI ID: $payeeAddress'),
-            if (amount.isNotEmpty) Text('Amount: ₹$amount'),
+            if (amount.isNotEmpty) Text('Amount: ${context.currencySymbol}$amount'),
             if (note.isNotEmpty) Text('Note: $note'),
           ],
         ),
@@ -91,7 +92,7 @@ class _QRScannerScreenState extends State<QRScannerScreen> with SingleTickerProv
           ElevatedButton(
             onPressed: () {
               Navigator.pop(context);
-              _showMessage('UPI payment detected: ₹$amount to $payeeName');
+              _showMessage('UPI payment detected: ${context.currencySymbol}$amount to $payeeName');
             },
             child: const Text('OK'),
           ),

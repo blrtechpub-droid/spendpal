@@ -23,11 +23,12 @@ class TrackerMatchingService {
   /// Auto-creation:
   /// If [autoCreateTracker] is true and no existing tracker matches,
   /// will auto-create a tracker for known banks/wallets
+  /// NOTE: Auto-creation disabled by default - use tracker suggestions instead
   static Future<({String trackerId, double confidence})?> matchTransaction({
     required String userId,
     required TransactionSource source,
     required String sender,
-    bool autoCreateTracker = true,
+    bool autoCreateTracker = false, // Disabled - use suggestions instead
   }) async {
     try {
       // Step 1: Get all active trackers for the user

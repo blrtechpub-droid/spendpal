@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:spendpal/services/portfolio_service.dart';
 import 'package:spendpal/models/investment_asset.dart';
 import 'package:spendpal/models/investment_holding.dart';
 import 'package:spendpal/models/investment_transaction.dart';
+import 'package:spendpal/utils/currency_utils.dart';
 import 'package:intl/intl.dart';
 
 class AssetDetailScreen extends StatefulWidget {
@@ -109,9 +111,23 @@ class _AssetDetailScreenState extends State<AssetDetailScreen> {
                 _navigateToUpdatePrice();
               } else if (value == 'add_transaction') {
                 _navigateToAddTransaction();
+              } else if (value == 'edit_asset') {
+                _navigateToEditAsset();
+              } else if (value == 'delete_asset') {
+                _confirmDeleteAsset();
               }
             },
             itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'edit_asset',
+                child: Row(
+                  children: [
+                    Icon(Icons.edit),
+                    SizedBox(width: 8),
+                    Text('Edit Asset'),
+                  ],
+                ),
+              ),
               const PopupMenuItem(
                 value: 'update_price',
                 child: Row(
@@ -129,6 +145,16 @@ class _AssetDetailScreenState extends State<AssetDetailScreen> {
                     Icon(Icons.add),
                     SizedBox(width: 8),
                     Text('Add Transaction'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'delete_asset',
+                child: Row(
+                  children: [
+                    Icon(Icons.delete, color: Colors.red),
+                    SizedBox(width: 8),
+                    Text('Delete Asset', style: TextStyle(color: Colors.red)),
                   ],
                 ),
               ),
@@ -263,13 +289,13 @@ class _AssetDetailScreenState extends State<AssetDetailScreen> {
                 _buildMetricColumn(
                   theme,
                   'Avg Price',
-                  '₹${_holding!.avgPrice.toStringAsFixed(2)}',
+                  context.formatCurrency(_holding!.avgPrice),
                 ),
                 _buildMetricColumn(
                   theme,
                   'Current Price',
                   _holding!.currentPrice != null
-                      ? '₹${_holding!.currentPrice!.toStringAsFixed(2)}'
+                      ? context.formatCurrency(_holding!.currentPrice!)
                       : 'N/A',
                 ),
               ],
@@ -283,17 +309,17 @@ class _AssetDetailScreenState extends State<AssetDetailScreen> {
                 _buildMetricColumn(
                   theme,
                   'Invested',
-                  '₹${_holding!.investedAmount.toStringAsFixed(2)}',
+                  context.formatCurrency(_holding!.investedAmount),
                 ),
                 _buildMetricColumn(
                   theme,
                   'Current Value',
-                  '₹${_holding!.currentValue.toStringAsFixed(2)}',
+                  context.formatCurrency(_holding!.currentValue),
                 ),
                 _buildMetricColumn(
                   theme,
                   'Unrealized P/L',
-                  '${isProfit ? '+' : ''}₹${_holding!.unrealizedPL.toStringAsFixed(2)}',
+                  '${isProfit ? '+' : '-'}${context.formatCurrency(_holding!.unrealizedPL.abs())}',
                   valueColor: plColor,
                 ),
               ],
@@ -456,18 +482,50 @@ class _AssetDetailScreenState extends State<AssetDetailScreen> {
       ),
       title: Row(
         children: [
-          Text(
-            _getTransactionTypeDisplay(txn.type),
-            style: theme.textTheme.bodyLarge?.copyWith(
-              fontWeight: FontWeight.w600,
+          Expanded(
+            child: Text(
+              _getTransactionTypeDisplay(txn.type),
+              style: theme.textTheme.bodyLarge?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
-          const Spacer(),
           Text(
-            '${isInflow ? '+' : '-'}₹${txn.amount.toStringAsFixed(2)}',
+            '${isInflow ? '+' : '-'}${context.formatCurrency(txn.amount)}',
             style: theme.textTheme.bodyLarge?.copyWith(
               color: color,
               fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
+      trailing: PopupMenuButton<String>(
+        onSelected: (value) {
+          if (value == 'edit') {
+            _navigateToEditTransaction(txn);
+          } else if (value == 'delete') {
+            _confirmDeleteTransaction(txn);
+          }
+        },
+        itemBuilder: (context) => [
+          const PopupMenuItem(
+            value: 'edit',
+            child: Row(
+              children: [
+                Icon(Icons.edit, size: 20),
+                SizedBox(width: 8),
+                Text('Edit'),
+              ],
+            ),
+          ),
+          const PopupMenuItem(
+            value: 'delete',
+            child: Row(
+              children: [
+                Icon(Icons.delete, color: Colors.red, size: 20),
+                SizedBox(width: 8),
+                Text('Delete', style: TextStyle(color: Colors.red)),
+              ],
             ),
           ),
         ],
@@ -479,12 +537,12 @@ class _AssetDetailScreenState extends State<AssetDetailScreen> {
           Text(DateFormat('dd MMM yyyy').format(txn.date)),
           if (txn.quantity != null && txn.price != null)
             Text(
-              '${txn.quantity!.toStringAsFixed(4)} units @ ₹${txn.price!.toStringAsFixed(2)}',
+              '${txn.quantity!.toStringAsFixed(4)} units @ ${context.formatCurrency(txn.price!)}',
               style: theme.textTheme.bodySmall,
             ),
           if (txn.fees > 0)
             Text(
-              'Fees: ₹${txn.fees.toStringAsFixed(2)}',
+              'Fees: ${context.formatCurrency(txn.fees)}',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.textTheme.bodySmall?.color?.withValues(alpha: 0.6),
               ),
@@ -579,6 +637,183 @@ class _AssetDetailScreenState extends State<AssetDetailScreen> {
         _refresh();
       }
     });
+  }
+
+  void _navigateToEditAsset() {
+    if (_asset == null) return;
+
+    Navigator.pushNamed(
+      context,
+      '/add_asset',
+      arguments: {'asset': _asset, 'isEdit': true},
+    ).then((value) {
+      if (value == true) {
+        _refresh();
+      }
+    });
+  }
+
+  Future<void> _confirmDeleteAsset() async {
+    if (_asset == null) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Asset?'),
+        content: Text(
+          'Are you sure you want to delete "${_asset!.name}"?\n\nThis will also delete all transactions and holdings for this asset. This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      await _deleteAsset();
+    }
+  }
+
+  Future<void> _deleteAsset() async {
+    if (_userId == null || _asset == null) return;
+
+    try {
+      // Delete all transactions
+      final txnSnapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(_userId)
+          .collection('investmentTransactions')
+          .where('assetId', isEqualTo: _asset!.assetId)
+          .get();
+
+      for (var doc in txnSnapshot.docs) {
+        await doc.reference.delete();
+      }
+
+      // Delete holding if exists
+      final holdingSnapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(_userId)
+          .collection('investmentHoldings')
+          .where('assetId', isEqualTo: _asset!.assetId)
+          .get();
+
+      for (var doc in holdingSnapshot.docs) {
+        await doc.reference.delete();
+      }
+
+      // Delete asset
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(_userId)
+          .collection('investmentAssets')
+          .doc(_asset!.assetId)
+          .delete();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Asset deleted successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        Navigator.pop(context, true);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error deleting asset: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  void _navigateToEditTransaction(InvestmentTransaction transaction) {
+    if (_asset == null) return;
+
+    Navigator.pushNamed(
+      context,
+      '/add_investment_transaction',
+      arguments: {
+        'asset': _asset,
+        'transaction': transaction,
+        'isEdit': true,
+      },
+    ).then((value) {
+      if (value == true) {
+        _refresh();
+      }
+    });
+  }
+
+  Future<void> _confirmDeleteTransaction(InvestmentTransaction transaction) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Transaction?'),
+        content: Text(
+          'Are you sure you want to delete this ${transaction.type.toLowerCase()} transaction?\n\nThis will recalculate your holdings. This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      await _deleteTransaction(transaction);
+    }
+  }
+
+  Future<void> _deleteTransaction(InvestmentTransaction transaction) async {
+    if (_userId == null) return;
+
+    try {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(_userId)
+          .collection('investmentTransactions')
+          .doc(transaction.txnId)
+          .delete();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Transaction deleted successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        _refresh();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error deleting transaction: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   IconData _getAssetIcon(String assetType) {

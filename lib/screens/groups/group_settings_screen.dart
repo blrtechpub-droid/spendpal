@@ -330,6 +330,52 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
                       ),
                     ),
 
+                    // Currency Selector
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      child: DropdownButtonFormField<String>(
+                        value: groupData['currency'] ?? '₹',
+                        decoration: AppTheme.inputDecoration(
+                          labelText: 'Currency',
+                          prefixIcon: const Icon(Icons.attach_money),
+                        ),
+                        dropdownColor: theme.cardTheme.color,
+                        items: const [
+                          DropdownMenuItem(value: '₹', child: Text('₹ INR - Indian Rupee')),
+                          DropdownMenuItem(value: '\$', child: Text('\$ USD - US Dollar')),
+                          DropdownMenuItem(value: '€', child: Text('€ EUR - Euro')),
+                          DropdownMenuItem(value: '£', child: Text('£ GBP - British Pound')),
+                          DropdownMenuItem(value: '¥', child: Text('¥ JPY - Japanese Yen')),
+                          DropdownMenuItem(value: 'A\$', child: Text('A\$ AUD - Australian Dollar')),
+                          DropdownMenuItem(value: 'C\$', child: Text('C\$ CAD - Canadian Dollar')),
+                        ],
+                        onChanged: (value) async {
+                          if (value != null) {
+                            try {
+                              await FirebaseFirestore.instance
+                                  .collection('groups')
+                                  .doc(widget.group.groupId)
+                                  .update({'currency': value});
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Currency updated successfully'),
+                                    backgroundColor: Colors.green,
+                                  ),
+                                );
+                              }
+                            } catch (e) {
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Error updating currency: $e')),
+                                );
+                              }
+                            }
+                          }
+                        },
+                      ),
+                    ),
+
                     const SizedBox(height: 16),
 
                     // Members Section

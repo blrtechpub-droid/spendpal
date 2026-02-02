@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:spendpal/services/analytics_service.dart';
+import 'package:spendpal/utils/currency_utils.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 
@@ -166,7 +167,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
                 child: _buildSummaryCard(
                   theme,
                   'Total Spent',
-                  '₹${total.toStringAsFixed(2)}',
+                  context.formatCurrency(total),
                   Icons.account_balance_wallet,
                   Colors.blue,
                 ),
@@ -176,7 +177,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
                 child: _buildSummaryCard(
                   theme,
                   'Avg/Day',
-                  '₹${average.toStringAsFixed(2)}',
+                  context.formatCurrency(average),
                   Icons.trending_up,
                   Colors.green,
                 ),
@@ -229,7 +230,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
                           ],
                         ),
                         Text(
-                          '₹${amount.toStringAsFixed(2)} (${percentage.toStringAsFixed(1)}%)',
+                          '${context.formatCurrency(amount)} (${percentage.toStringAsFixed(1)}%)',
                           style: theme.textTheme.bodyMedium,
                         ),
                       ],
@@ -329,7 +330,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
                   ],
                 ),
                 Text(
-                  '₹${entry.value.toStringAsFixed(2)} (${percentage.toStringAsFixed(1)}%)',
+                  '${context.formatCurrency(entry.value)} (${percentage.toStringAsFixed(1)}%)',
                   style: theme.textTheme.bodyMedium,
                 ),
               ],
@@ -386,7 +387,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
                     reservedSize: 60,
                     getTitlesWidget: (value, meta) {
                       return Text(
-                        '₹${(value / 1000).toStringAsFixed(0)}k',
+                        '${context.currencySymbol}${(value / 1000).toStringAsFixed(0)}k',
                         style: theme.textTheme.bodySmall,
                       );
                     },
@@ -453,7 +454,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
               children: [
                 Text(entry.key, style: theme.textTheme.bodyLarge),
                 Text(
-                  '₹${entry.value.toStringAsFixed(2)}',
+                  context.formatCurrency(entry.value),
                   style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold),
                 ),
               ],

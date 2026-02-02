@@ -13,6 +13,7 @@ import 'package:spendpal/widgets/upi_settle_dialog.dart';
 import 'package:spendpal/screens/friends/friend_charts_screen.dart';
 import 'package:spendpal/screens/friends/friend_whiteboard_screen.dart';
 import 'package:spendpal/services/group_export_service.dart';
+import 'package:spendpal/utils/currency_utils.dart';
 
 class FriendHomeScreen extends StatelessWidget {
   final String friendId;
@@ -184,8 +185,8 @@ class FriendHomeScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     if (!isSettled)
-                      Text(
-                        '₹${totalOwed.abs().toStringAsFixed(2)}',
+                      CurrencyText(
+                        totalOwed.abs(),
                         style: TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.w700,
@@ -209,22 +210,83 @@ class FriendHomeScreen extends StatelessWidget {
     String currentUserId,
     String friendId,
   ) {
+    final settlementId = settlement['_id'] as String? ?? '';
     final fromUserId = settlement['fromUserId'] as String? ?? '';
     final fromUserName = settlement['fromUserName'] as String? ?? 'Unknown';
     final toUserName = settlement['toUserName'] as String? ?? 'Unknown';
     final amount = (settlement['amount'] as num?)?.toDouble() ?? 0.0;
     final timestamp = settlement['settledAt'] as Timestamp?;
     final date = timestamp?.toDate();
-    final paymentMethod = settlement['paymentMethod'] as String? ?? 'payment';
+    final isVerified = settlement['isVerified'] as bool? ?? false;
 
     final isPayer = fromUserId == currentUserId;
     final displayText = isPayer ? 'You paid $toUserName' : '$fromUserName paid you';
     final statusText = isPayer ? 'you paid' : 'received';
     final statusColor = isPayer ? Colors.orange.shade700 : Colors.green.shade700;
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Row(
+    // Can delete if: not verified AND current user is the payer
+    final canDelete = !isVerified && isPayer;
+
+    return Dismissible(
+      key: Key(settlementId),
+      direction: canDelete ? DismissDirection.endToStart : DismissDirection.none,
+      background: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 20),
+        color: Colors.red,
+        child: const Icon(Icons.delete, color: Colors.white, size: 32),
+      ),
+      confirmDismiss: (direction) async {
+        return await showDialog(
+          context: context,
+          builder: (BuildContext context) {
+            return AlertDialog(
+              title: const Text('Delete Settlement?'),
+              content: Text('Delete payment of ${context.formatCurrency(amount)} to $toUserName?'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: const Text('Cancel'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(true),
+                  style: TextButton.styleFrom(foregroundColor: Colors.red),
+                  child: const Text('Delete'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+      onDismissed: (direction) async {
+        try {
+          await FirebaseFirestore.instance
+              .collection('settlements')
+              .doc(settlementId)
+              .delete();
+
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Settlement of ${context.formatCurrency(amount)} deleted'),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
+        } catch (e) {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Error deleting settlement: $e'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+        }
+      },
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
         children: [
           // Date Column
           if (date != null)
@@ -276,15 +338,15 @@ class FriendHomeScreen extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    const Icon(
-                      Icons.check_circle,
-                      color: Colors.green,
+                    Icon(
+                      isVerified ? Icons.check_circle : Icons.schedule,
+                      color: isVerified ? Colors.green : Colors.orange,
                       size: 14,
                     ),
                     const SizedBox(width: 4),
-                    const Text(
-                      'Payment',
-                      style: TextStyle(
+                    Text(
+                      isVerified ? 'Payment' : 'Payment (Pending)',
+                      style: const TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.bold,
                         color: Colors.white,
@@ -320,8 +382,8 @@ class FriendHomeScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 2),
-              Text(
-                '₹${amount.toStringAsFixed(2)}',
+              CurrencyText(
+                amount,
                 style: TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.w700,
@@ -331,6 +393,7 @@ class FriendHomeScreen extends StatelessWidget {
             ],
           ),
         ],
+        ),
       ),
     );
   }
@@ -427,14 +490,23 @@ class FriendHomeScreen extends StatelessWidget {
       }
     }
 
-    // Account for settlements
+    // Account for settlements (both verified and unverified)
     try {
-      final settlementsSnapshot = await FirebaseFirestore.instance
-          .collection('settlements')
-          .where('isVerified', isEqualTo: true)
-          .get();
+      // Query settlements where current user is involved
+      final results = await Future.wait([
+        FirebaseFirestore.instance
+            .collection('settlements')
+            .where('fromUserId', isEqualTo: currentUserId)
+            .get(),
+        FirebaseFirestore.instance
+            .collection('settlements')
+            .where('toUserId', isEqualTo: currentUserId)
+            .get(),
+      ]);
 
-      for (var settlementDoc in settlementsSnapshot.docs) {
+      final allSettlements = [...results[0].docs, ...results[1].docs];
+
+      for (var settlementDoc in allSettlements) {
         final data = settlementDoc.data();
         final fromUserId = data['fromUserId'] as String?;
         final toUserId = data['toUserId'] as String?;
@@ -535,8 +607,8 @@ class FriendHomeScreen extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(height: 4),
-                          Text(
-                            '₹${balance.abs().toStringAsFixed(2)}',
+                          CurrencyText(
+                            balance.abs(),
                             style: TextStyle(
                               fontSize: 28,
                               fontWeight: FontWeight.bold,
@@ -648,12 +720,24 @@ class FriendHomeScreen extends StatelessWidget {
                   return const Center(child: CircularProgressIndicator());
                 }
 
-                // Fetch settlements involving this friend
-                return FutureBuilder<QuerySnapshot>(
-                  future: FirebaseFirestore.instance
-                      .collection('settlements')
-                      .where('isVerified', isEqualTo: true)
-                      .get(),
+                // Fetch settlements involving this friend (both verified and unverified)
+                // Query settlements where current user is sender OR receiver
+                return FutureBuilder<List<QueryDocumentSnapshot>>(
+                  future: Future.wait([
+                    // Settlements where current user is sender
+                    FirebaseFirestore.instance
+                        .collection('settlements')
+                        .where('fromUserId', isEqualTo: currentUserId)
+                        .get(),
+                    // Settlements where current user is receiver
+                    FirebaseFirestore.instance
+                        .collection('settlements')
+                        .where('toUserId', isEqualTo: currentUserId)
+                        .get(),
+                  ]).then((results) {
+                    // Combine both query results
+                    return [...results[0].docs, ...results[1].docs];
+                  }),
                   builder: (context, settlementSnapshot) {
                     // Filter expenses to only show those involving this friend
                     var allExpenses = expenseSnapshot.data!.docs;
@@ -676,15 +760,30 @@ class FriendHomeScreen extends StatelessWidget {
                     // Filter settlements to only those involving this friend
                     List<QueryDocumentSnapshot> settlements = [];
                     if (settlementSnapshot.hasData) {
-                      settlements = settlementSnapshot.data!.docs.where((doc) {
+                      final allSettlements = settlementSnapshot.data!;
+                      print('DEBUG: Total settlements for current user: ${allSettlements.length}');
+                      print('DEBUG: Current user ID: $currentUserId');
+                      print('DEBUG: Friend ID: $friendId');
+
+                      settlements = allSettlements.where((doc) {
                         final data = doc.data() as Map<String, dynamic>;
                         final fromUserId = data['fromUserId'] as String?;
                         final toUserId = data['toUserId'] as String?;
 
+                        print('DEBUG: Settlement - from: $fromUserId, to: $toUserId');
+
                         // Only include settlements between current user and this friend
-                        return (fromUserId == currentUserId && toUserId == friendId) ||
+                        final matches = (fromUserId == currentUserId && toUserId == friendId) ||
                                (fromUserId == friendId && toUserId == currentUserId);
+
+                        if (matches) {
+                          print('DEBUG: ✓ Settlement matches!');
+                        }
+
+                        return matches;
                       }).toList();
+
+                      print('DEBUG: Filtered settlements for this friend: ${settlements.length}');
                     }
 
                     if (expenses.isEmpty && settlements.isEmpty) {
@@ -775,9 +874,11 @@ class FriendHomeScreen extends StatelessWidget {
 
                     // Add settlement items
                     for (var settlement in settlements) {
+                      final settlementData = settlement.data() as Map<String, dynamic>;
+                      settlementData['_id'] = settlement.id; // Add document ID
                       displayItems.add({
                         'type': 'settlement',
-                        'data': settlement,
+                        'data': settlementData,
                       });
                     }
 
@@ -789,7 +890,7 @@ class FriendHomeScreen extends StatelessWidget {
                       if (a['type'] == 'group') {
                         aTime = a['data']['lastDate'] as Timestamp?;
                       } else if (a['type'] == 'settlement') {
-                        final settlementData = (a['data'] as QueryDocumentSnapshot).data() as Map<String, dynamic>;
+                        final settlementData = a['data'] as Map<String, dynamic>;
                         aTime = settlementData['settledAt'] as Timestamp?;
                       } else {
                         final expenseData = (a['data'] as QueryDocumentSnapshot).data() as Map<String, dynamic>;
@@ -799,7 +900,7 @@ class FriendHomeScreen extends StatelessWidget {
                       if (b['type'] == 'group') {
                         bTime = b['data']['lastDate'] as Timestamp?;
                       } else if (b['type'] == 'settlement') {
-                        final settlementData = (b['data'] as QueryDocumentSnapshot).data() as Map<String, dynamic>;
+                        final settlementData = b['data'] as Map<String, dynamic>;
                         bTime = settlementData['settledAt'] as Timestamp?;
                       } else {
                         final expenseData = (b['data'] as QueryDocumentSnapshot).data() as Map<String, dynamic>;
@@ -818,7 +919,7 @@ class FriendHomeScreen extends StatelessWidget {
                       if (item['type'] == 'group') {
                         timestamp = item['data']['lastDate'] as Timestamp?;
                       } else if (item['type'] == 'settlement') {
-                        final settlementData = (item['data'] as QueryDocumentSnapshot).data() as Map<String, dynamic>;
+                        final settlementData = item['data'] as Map<String, dynamic>;
                         timestamp = settlementData['settledAt'] as Timestamp?;
                       } else {
                         final expenseData = (item['data'] as QueryDocumentSnapshot).data() as Map<String, dynamic>;
@@ -863,11 +964,10 @@ class FriendHomeScreen extends StatelessWidget {
                                 );
                               } else if (item['type'] == 'settlement') {
                                 // Render settlement
-                                final settlementDoc = item['data'] as QueryDocumentSnapshot;
-                                final data = settlementDoc.data() as Map<String, dynamic>;
+                                final settlementData = item['data'] as Map<String, dynamic>;
                                 return _buildSettlementItem(
                                   context,
-                                  data,
+                                  settlementData,
                                   currentUserId,
                                   friendId,
                                 );
@@ -1032,7 +1132,7 @@ class FriendHomeScreen extends StatelessWidget {
                                             Text(
                                               group != null
                                                   ? group.name
-                                                  : '$paidByName paid ₹${amount.toStringAsFixed(2)}',
+                                                  : '$paidByName paid ${context.formatCurrency(amount)}',
                                               style: TextStyle(
                                                 fontSize: 13,
                                                 color: Colors.grey[500],
@@ -1058,8 +1158,8 @@ class FriendHomeScreen extends StatelessWidget {
                                             ),
                                           ),
                                           const SizedBox(height: 2),
-                                          Text(
-                                            '₹${userShare.toStringAsFixed(2)}',
+                                          CurrencyText(
+                                            userShare,
                                             style: TextStyle(
                                               fontSize: 15,
                                               fontWeight: FontWeight.w700,
@@ -1298,8 +1398,8 @@ class _SettleUpSheet extends StatelessWidget {
                       : '${debt.fromUserName} owes you',
                   style: const TextStyle(fontWeight: FontWeight.w600),
                 ),
-                subtitle: Text(
-                  '₹${debt.amount.toStringAsFixed(2)}',
+                subtitle: CurrencyText(
+                  debt.amount,
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,

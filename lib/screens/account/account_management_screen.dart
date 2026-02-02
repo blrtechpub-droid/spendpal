@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:spendpal/models/money_tracker_model.dart';
 import 'package:spendpal/theme/app_theme.dart';
+import 'package:spendpal/utils/currency_utils.dart';
 import 'package:spendpal/screens/account/add_bank_account_screen.dart';
 import 'package:spendpal/screens/account/add_credit_card_screen.dart';
 
@@ -285,7 +286,7 @@ class _AccountManagementScreenState extends State<AccountManagementScreen>
                     if (isCreditCard && account.creditLimit != null) ...[
                       const SizedBox(height: 4),
                       Text(
-                        'Limit: ₹${account.creditLimit!.toStringAsFixed(2)}',
+                        'Limit: ${context.formatCurrency(account.creditLimit!)}',
                         style: TextStyle(
                           color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.6),
                           fontSize: 11,
@@ -300,7 +301,7 @@ class _AccountManagementScreenState extends State<AccountManagementScreen>
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
-                    '₹${account.balance.toStringAsFixed(2)}',
+                    context.formatCurrency(account.balance),
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,

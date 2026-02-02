@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:spendpal/models/money_tracker_model.dart';
+import 'package:spendpal/services/account_tracker_service.dart';
 import 'package:spendpal/theme/app_theme.dart';
 
 class AddBankAccountScreen extends StatefulWidget {
@@ -86,6 +87,13 @@ class _AddBankAccountScreenState extends State<AddBankAccountScreen> {
         // Create new account
         accountData['createdAt'] = FieldValue.serverTimestamp();
         await _firestore.collection('moneyAccounts').add(accountData);
+
+        // Automatically create tracker for this account if possible
+        await AccountTrackerService.createTrackerForMoneyAccount(
+          userId: currentUser.uid,
+          accountName: accountName,
+          accountType: 'bank',
+        );
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(

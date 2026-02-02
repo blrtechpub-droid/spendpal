@@ -38,6 +38,7 @@ class AccountSelectionDropdown extends StatefulWidget {
   final Function(String? accountId, AccountSource? source, dynamic account) onAccountSelected;
   final String? accountType; // 'bank', 'credit_card', or null for all money accounts
   final bool includeInvestments; // Include investment assets
+  final String? trackerId; // Filter accounts by linked tracker ID
   final String label;
   final IconData icon;
   final bool required;
@@ -48,6 +49,7 @@ class AccountSelectionDropdown extends StatefulWidget {
     required this.onAccountSelected,
     this.accountType,
     this.includeInvestments = false,
+    this.trackerId,
     this.label = 'Select Account',
     this.icon = Icons.account_balance_wallet,
     this.required = false,
@@ -120,21 +122,50 @@ class _AccountSelectionDropdownState extends State<AccountSelectionDropdown> {
       query = query.where('accountType', isEqualTo: widget.accountType);
     }
 
+    // Filter by tracker ID if specified
+    if (widget.trackerId != null) {
+      query = query.where('trackerId', isEqualTo: widget.trackerId);
+    }
+
     final snapshot = await query.get();
 
     for (final doc in snapshot.docs) {
       final account = MoneyTrackerAccount.fromFirestore(doc);
       final isCreditCard = account.accountType == 'credit_card';
+      final isWallet = account.accountType == 'wallet';
+
+      IconData accountIcon;
+      Color accountColor;
+
+      if (isCreditCard) {
+        accountIcon = Icons.credit_card;
+        accountColor = Colors.purple;
+      } else if (isWallet) {
+        accountIcon = Icons.wallet;
+        accountColor = Colors.orange;
+      } else {
+        accountIcon = Icons.account_balance;
+        accountColor = Colors.blue;
+      }
 
       items.add(AccountItem(
         id: account.accountId,
         name: account.accountName,
         displayInfo: '₹${account.balance.toStringAsFixed(0)}',
-        icon: isCreditCard ? Icons.credit_card : Icons.account_balance,
-        color: isCreditCard ? Colors.purple : Colors.blue,
+        icon: accountIcon,
+        color: accountColor,
         source: AccountSource.money,
         account: account,
       ));
+    }
+
+    // Auto-select if only one account matches the tracker
+    if (widget.trackerId != null && items.length == 1 && _selectedAccountId == null) {
+      _selectedAccountId = items[0].id;
+      // Notify parent of auto-selection
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        widget.onAccountSelected(items[0].id, items[0].source, items[0].account);
+      });
     }
   }
 

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:spendpal/services/investment_sms_parser_service.dart';
 import 'package:spendpal/theme/app_theme.dart';
-import 'package:intl/intl.dart';
+import 'package:spendpal/utils/currency_utils.dart';
 
 /// Screen to review and categorize investment SMS
 /// Users can approve/reject detected investment transactions before importing
@@ -15,7 +15,6 @@ class InvestmentSmsReviewScreen extends StatefulWidget {
 
 class _InvestmentSmsReviewScreenState extends State<InvestmentSmsReviewScreen> {
   final currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
-  final currencyFormat = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 2);
 
   @override
   Widget build(BuildContext context) {
@@ -202,7 +201,7 @@ class _InvestmentSmsReviewScreenState extends State<InvestmentSmsReviewScreen> {
                 if (amount != null)
                   _buildDetailRow(
                     'Amount',
-                    currencyFormat.format(amount),
+                    context.formatCurrency(amount),
                     Colors.green,
                   ),
 
@@ -226,7 +225,7 @@ class _InvestmentSmsReviewScreenState extends State<InvestmentSmsReviewScreen> {
                 if (nav != null)
                   _buildDetailRow(
                     'NAV',
-                    currencyFormat.format(nav),
+                    context.formatCurrency(nav),
                     AppTheme.secondaryText,
                   ),
 
@@ -234,7 +233,7 @@ class _InvestmentSmsReviewScreenState extends State<InvestmentSmsReviewScreen> {
                 if (price != null)
                   _buildDetailRow(
                     'Price',
-                    currencyFormat.format(price),
+                    context.formatCurrency(price),
                     AppTheme.secondaryText,
                   ),
 

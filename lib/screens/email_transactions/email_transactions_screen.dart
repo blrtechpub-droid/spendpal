@@ -9,6 +9,7 @@ import 'package:spendpal/services/account_tracker_service.dart';
 import 'package:spendpal/services/transaction_display_service.dart';
 import 'package:spendpal/models/local_transaction_model.dart';
 import 'package:spendpal/theme/app_theme.dart';
+import 'package:spendpal/utils/currency_utils.dart';
 import 'package:spendpal/widgets/tracker_badge_widget.dart';
 import 'package:intl/intl.dart';
 import 'upload_email_screenshot_screen.dart';
@@ -807,6 +808,18 @@ class _EmailTransactionsScreenState extends State<EmailTransactionsScreen> {
         ),
         elevation: 0,
         actions: [
+          // Processing statistics
+          IconButton(
+            icon: const Icon(Icons.analytics),
+            tooltip: 'Processing Statistics',
+            onPressed: () {
+              Navigator.pushNamed(
+                context,
+                '/processing_stats',
+                arguments: {'source': TransactionSource.email},
+              );
+            },
+          ),
           // Sync emails button
           IconButton(
             icon: _isCheckingGmail
@@ -1210,7 +1223,7 @@ class _EmailTransactionsScreenState extends State<EmailTransactionsScreen> {
                   ),
                   // Amount (matching SMS teal color)
                   Text(
-                    '₹${amount.toStringAsFixed(2)}',
+                    context.formatCurrency(amount),
                     style: const TextStyle(
                       color: AppTheme.tealAccent,
                       fontSize: 18,
@@ -2001,7 +2014,7 @@ class _EmailTransactionsScreenState extends State<EmailTransactionsScreen> {
               ),
             ),
             Text(
-              '₹${amount.toStringAsFixed(2)}',
+              context.formatCurrency(amount),
               style: const TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,

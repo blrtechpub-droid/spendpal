@@ -16,6 +16,7 @@ class SmsExpenseModel {
   final String? linkedExpenseId;
   final String smsSender;
   final String? transactionType; // 'debit', 'credit', 'salary', 'credit_card_payment'
+  final String? trackerId; // Account tracker that matched this SMS
 
   SmsExpenseModel({
     required this.id,
@@ -33,6 +34,7 @@ class SmsExpenseModel {
     this.linkedExpenseId,
     required this.smsSender,
     this.transactionType,
+    this.trackerId,
   });
 
   /// Create from Firestore document
@@ -56,6 +58,7 @@ class SmsExpenseModel {
       linkedExpenseId: data['linkedExpenseId'] as String?,
       smsSender: data['smsSender'] as String? ?? 'Unknown',
       transactionType: data['transactionType'] as String?,
+      trackerId: data['trackerId'] as String?,
     );
   }
 
@@ -77,6 +80,7 @@ class SmsExpenseModel {
       'linkedExpenseId': linkedExpenseId,
       'smsSender': smsSender,
       'transactionType': transactionType,
+      'trackerId': trackerId,
     };
   }
 
@@ -97,6 +101,7 @@ class SmsExpenseModel {
     String? linkedExpenseId,
     String? smsSender,
     String? transactionType,
+    String? trackerId,
   }) {
     return SmsExpenseModel(
       id: id ?? this.id,
@@ -114,6 +119,7 @@ class SmsExpenseModel {
       linkedExpenseId: linkedExpenseId ?? this.linkedExpenseId,
       smsSender: smsSender ?? this.smsSender,
       transactionType: transactionType ?? this.transactionType,
+      trackerId: trackerId ?? this.trackerId,
     );
   }
 

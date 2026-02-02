@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:spendpal/screens/expense/expense_detail_screen.dart';
 import 'package:spendpal/theme/app_theme.dart';
 import 'package:spendpal/widgets/empty_state_widget.dart';
+import 'package:spendpal/utils/currency_utils.dart';
 
 class ActivityScreen extends StatelessWidget {
   const ActivityScreen({Key? key}) : super(key: key);
@@ -336,7 +337,7 @@ class ActivityScreen extends StatelessWidget {
                         const SizedBox(height: 4),
                         if (isGetBack)
                           Text(
-                            'You get back ₹${getBackAmount.toStringAsFixed(2)}',
+                            'You get back ${context.formatCurrency(getBackAmount)}',
                             style: const TextStyle(
                               color: Colors.green,
                               fontSize: 14,
@@ -344,7 +345,7 @@ class ActivityScreen extends StatelessWidget {
                           )
                         else if (!isPaidByCurrentUser)
                           Text(
-                            'You owe ₹${currentUserShare.toStringAsFixed(2)}',
+                            'You owe ${context.formatCurrency(currentUserShare)}',
                             style: const TextStyle(
                               color: Colors.orange,
                               fontSize: 14,
@@ -352,7 +353,7 @@ class ActivityScreen extends StatelessWidget {
                           )
                         else
                           Text(
-                            'You paid ₹${amount.toStringAsFixed(2)}',
+                            'You paid ${context.formatCurrency(amount)}',
                             style: TextStyle(
                               color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
                               fontSize: 14,

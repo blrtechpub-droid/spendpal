@@ -12,6 +12,7 @@ import '../../services/debt_simplification_service.dart';
 import '../../services/group_export_service.dart';
 import '../../models/simplified_debt_model.dart';
 import '../../widgets/upi_settle_dialog.dart';
+import '../../utils/currency_utils.dart';
 import 'group_balances_screen.dart';
 import 'group_charts_screen.dart';
 import 'group_whiteboard_screen.dart';
@@ -269,7 +270,7 @@ class GroupHomeScreen extends StatelessWidget {
                         ),
                         const SizedBox(height: 8),
                         FutureBuilder<List<Map<String, dynamic>>>(
-                          future: _getBalanceMessages(balances, currentUserId),
+                          future: _getBalanceMessages(context, balances, currentUserId),
                           builder: (context, messageSnapshot) {
                             if (!messageSnapshot.hasData) {
                               return const SizedBox.shrink();
@@ -612,7 +613,7 @@ class GroupHomeScreen extends StatelessWidget {
                                                 ),
                                                 const SizedBox(height: 2),
                                                 Text(
-                                                  '$paidByName paid ₹${amount.toStringAsFixed(2)}',
+                                                  '$paidByName paid ${context.formatCurrency(amount)}',
                                                   style: TextStyle(
                                                     fontSize: 13,
                                                     color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
@@ -639,7 +640,7 @@ class GroupHomeScreen extends StatelessWidget {
                                               ),
                                               const SizedBox(height: 2),
                                               Text(
-                                                '₹${userShare.toStringAsFixed(2)}',
+                                                context.formatCurrency(userShare),
                                                 style: TextStyle(
                                                   fontSize: 15,
                                                   fontWeight: FontWeight.w700,
@@ -797,7 +798,7 @@ class GroupHomeScreen extends StatelessWidget {
               ),
               const SizedBox(height: 2),
               Text(
-                '₹${amount.toStringAsFixed(2)}',
+                context.formatCurrency(amount),
                 style: TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.w700,
@@ -811,7 +812,7 @@ class GroupHomeScreen extends StatelessWidget {
     );
   }
 
-  Future<List<Map<String, dynamic>>> _getBalanceMessages(Map<String, double> balances, String currentUserId) async {
+  Future<List<Map<String, dynamic>>> _getBalanceMessages(BuildContext context, Map<String, double> balances, String currentUserId) async {
     List<Map<String, dynamic>> messages = [];
 
     for (var entry in balances.entries) {
@@ -835,7 +836,7 @@ class GroupHomeScreen extends StatelessWidget {
         final amount = currentUserBalance.abs().clamp(0.0, balance);
         if (amount > 0.01) {
           messages.add({
-            'text': 'You owe $userName ₹${amount.toStringAsFixed(2)}',
+            'text': 'You owe $userName ${context.formatCurrency(amount)}',
             'isOwe': true,
           });
         }
@@ -844,7 +845,7 @@ class GroupHomeScreen extends StatelessWidget {
         final amount = currentUserBalance.clamp(0.0, balance.abs());
         if (amount > 0.01) {
           messages.add({
-            'text': '$userName owes you ₹${amount.toStringAsFixed(2)}',
+            'text': '$userName owes you ${context.formatCurrency(amount)}',
             'isOwe': false,
           });
         }
@@ -1005,7 +1006,7 @@ class GroupHomeScreen extends StatelessWidget {
 
       print('DEBUG: Simplified debts count: ${allDebts.length}');
       for (var debt in allDebts) {
-        print('  Debt: ${debt.fromUserId} owes ${debt.toUserId} ₹${debt.amount}');
+        print('  Debt: ${debt.fromUserId} owes ${debt.toUserId} ${debt.amount}');
       }
 
       // Enrich debts with user names
@@ -1097,7 +1098,7 @@ class _SettleUpSheet extends StatelessWidget {
       child: ListTile(
         leading: const Icon(Icons.account_balance_wallet, color: Colors.teal),
         title: Text('${debt.fromUserName} → ${debt.toUserName}'),
-        subtitle: Text('₹${debt.amount.toStringAsFixed(2)}'),
+        subtitle: Text(context.formatCurrency(debt.amount)),
         trailing: ElevatedButton(
           onPressed: () {
             Navigator.pop(context); // Close sheet
