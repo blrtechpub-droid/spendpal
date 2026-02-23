@@ -3,6 +3,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:uuid/uuid.dart';
 import 'package:spendpal/models/sms_scan_progress.dart';
 import 'sms_parser_service.dart';
 import 'ai_sms_parser_service.dart';
@@ -14,6 +15,7 @@ import '../models/account_tracker_model.dart';
 import 'generic_transaction_parser_service.dart';
 import 'local_db_service.dart';
 import '../models/local_transaction_model.dart';
+import '../models/scan_history_model.dart';
 
 class SmsListenerService {
   static final Telephony telephony = Telephony.instance;
@@ -663,6 +665,30 @@ class SmsListenerService {
 
       // Save scan timestamp for next time
       await _saveLastScanTimestamp();
+
+      // Save scan history for cost tracking
+      if (userId != null) {
+        final scanHistory = ScanHistoryModel(
+          id: const Uuid().v4(),
+          userId: userId,
+          scanDate: DateTime.now(),
+          source: TransactionSource.sms,
+          mode: fastMode ? ScanMode.fast : ScanMode.ai,
+          daysScanned: days,
+          rangeStart: cutoffDate,
+          rangeEnd: now,
+          totalMessages: messages.length,
+          filteredMessages: progress.filteredBankSms,
+          alreadyProcessed: progress.alreadyProcessed,
+          patternMatched: progress.regexMatched,
+          aiProcessed: progress.aiProcessed,
+          transactionsFound: progress.foundTransactions,
+          newPatternsLearned: 0, // TODO: Track this from parser
+        );
+
+        await LocalDBService.instance.insertScanHistory(scanHistory);
+        print('📝 Scan history saved: ${scanHistory.cost > 0 ? "₹${scanHistory.cost.toStringAsFixed(2)}" : "₹0 (Fast Mode)"}');
+      }
 
       // Update tracker statistics
       if (userId != null && trackerSmsCounts.isNotEmpty) {

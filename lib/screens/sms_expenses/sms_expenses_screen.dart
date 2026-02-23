@@ -256,6 +256,9 @@ class _SmsExpensesScreenState extends State<SmsExpensesScreen> {
             // Reload last scan time
             await _loadLastScanTime();
 
+            // Refresh the transaction list to show newly scanned transactions
+            _refreshTransactions();
+
             setState(() {
               _lastError = null;
               _permissionDenied = false;
@@ -1077,6 +1080,14 @@ class _SmsExpensesScreenState extends State<SmsExpensesScreen> {
           ],
         ),
         actions: [
+          // Scan history
+          IconButton(
+            icon: const Icon(Icons.history, color: AppTheme.tealAccent),
+            onPressed: () {
+              Navigator.pushNamed(context, '/scan_history');
+            },
+            tooltip: 'Scan History & Costs',
+          ),
           // Processing statistics
           IconButton(
             icon: const Icon(Icons.analytics, color: AppTheme.tealAccent),

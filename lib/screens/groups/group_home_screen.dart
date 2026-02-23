@@ -504,7 +504,7 @@ class GroupHomeScreen extends StatelessWidget {
 
                               // Handle settlement items
                               if (itemType == 'settlement') {
-                                return _buildSettlementItem(item, currentUserId, theme);
+                                return _buildSettlementItem(context, item, currentUserId, theme);
                               }
 
                               // Handle expense items
@@ -640,7 +640,7 @@ class GroupHomeScreen extends StatelessWidget {
                                               ),
                                               const SizedBox(height: 2),
                                               Text(
-                                                context.formatCurrency(userShare),
+                                                context.formatCurrency(userShare.toDouble()),
                                                 style: TextStyle(
                                                   fontSize: 15,
                                                   fontWeight: FontWeight.w700,
@@ -688,7 +688,7 @@ class GroupHomeScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildSettlementItem(Map<String, dynamic> settlement, String currentUserId, ThemeData theme) {
+  Widget _buildSettlementItem(BuildContext context, Map<String, dynamic> settlement, String currentUserId, ThemeData theme) {
     final fromUserId = settlement['fromUserId'] as String? ?? '';
     final fromUserName = settlement['fromUserName'] as String? ?? 'Unknown';
     final toUserId = settlement['toUserId'] as String? ?? '';

@@ -4,6 +4,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:path_provider/path_provider.dart';
 import '../models/local_transaction_model.dart';
 import '../models/local_pattern_model.dart';
+import '../models/scan_history_model.dart';
 import 'encryption_service.dart';
 
 /// Local database service for privacy-first transaction storage
@@ -14,7 +15,7 @@ import 'encryption_service.dart';
 class LocalDBService {
   static Database? _database;
   static final _databaseName = 'spendpal_local.db';
-  static final _databaseVersion = 3; // Incremented for tracker columns
+  static final _databaseVersion = 4; // Incremented for scan_history table
 
   // Singleton
   LocalDBService._();
@@ -131,6 +132,32 @@ class LocalDBService {
     await db.execute('CREATE INDEX idx_patterns_active ON patterns(is_active)');
     await db.execute('CREATE INDEX idx_patterns_accuracy ON patterns(accuracy DESC)');
 
+    // Scan history table
+    await db.execute('''
+      CREATE TABLE scan_history (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        scan_date TEXT NOT NULL,
+        source TEXT NOT NULL,
+        mode TEXT NOT NULL,
+        days_scanned INTEGER NOT NULL,
+        range_start TEXT NOT NULL,
+        range_end TEXT NOT NULL,
+        total_messages INTEGER DEFAULT 0,
+        filtered_messages INTEGER DEFAULT 0,
+        already_processed INTEGER DEFAULT 0,
+        pattern_matched INTEGER DEFAULT 0,
+        ai_processed INTEGER DEFAULT 0,
+        transactions_found INTEGER DEFAULT 0,
+        new_patterns_learned INTEGER DEFAULT 0
+      )
+    ''');
+
+    // Indexes for scan history
+    await db.execute('CREATE INDEX idx_scan_history_user ON scan_history(user_id)');
+    await db.execute('CREATE INDEX idx_scan_history_date ON scan_history(scan_date DESC)');
+    await db.execute('CREATE INDEX idx_scan_history_source ON scan_history(source)');
+
     print('✅ Database tables created successfully');
   }
 
@@ -186,6 +213,37 @@ class LocalDBService {
       await db.execute('CREATE INDEX idx_transactions_tracker ON transactions(tracker_id)');
 
       print('✅ Tracker columns added successfully');
+    }
+
+    // Migration from v3 to v4: Add scan_history table
+    if (oldVersion < 4) {
+      print('📝 Adding scan_history table...');
+
+      await db.execute('''
+        CREATE TABLE scan_history (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL,
+          scan_date TEXT NOT NULL,
+          source TEXT NOT NULL,
+          mode TEXT NOT NULL,
+          days_scanned INTEGER NOT NULL,
+          range_start TEXT NOT NULL,
+          range_end TEXT NOT NULL,
+          total_messages INTEGER DEFAULT 0,
+          filtered_messages INTEGER DEFAULT 0,
+          already_processed INTEGER DEFAULT 0,
+          pattern_matched INTEGER DEFAULT 0,
+          ai_processed INTEGER DEFAULT 0,
+          transactions_found INTEGER DEFAULT 0,
+          new_patterns_learned INTEGER DEFAULT 0
+        )
+      ''');
+
+      await db.execute('CREATE INDEX idx_scan_history_user ON scan_history(user_id)');
+      await db.execute('CREATE INDEX idx_scan_history_date ON scan_history(scan_date DESC)');
+      await db.execute('CREATE INDEX idx_scan_history_source ON scan_history(source)');
+
+      print('✅ Scan history table added successfully');
     }
   }
 
@@ -803,6 +861,191 @@ class LocalDBService {
     } catch (e) {
       print('❌ Error getting pattern count: $e');
       return 0;
+    }
+  }
+
+  // ==================== SCAN HISTORY OPERATIONS ====================
+
+  /// Insert scan history record
+  Future<bool> insertScanHistory(ScanHistoryModel scanHistory) async {
+    try {
+      final db = await database;
+
+      await db.insert(
+        'scan_history',
+        scanHistory.toMap(),
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+
+      print('✅ Scan history saved: ${scanHistory.source.name} - ${scanHistory.scanDate}');
+      return true;
+    } catch (e) {
+      print('❌ Error inserting scan history: $e');
+      return false;
+    }
+  }
+
+  /// Get all scan history for a user
+  Future<List<ScanHistoryModel>> getScanHistory({
+    required String userId,
+    TransactionSource? source,
+    int? limit,
+  }) async {
+    try {
+      final db = await database;
+
+      String query = 'SELECT * FROM scan_history WHERE user_id = ?';
+      List<dynamic> args = [userId];
+
+      if (source != null) {
+        query += ' AND source = ?';
+        args.add(source.name);
+      }
+
+      query += ' ORDER BY scan_date DESC';
+
+      if (limit != null) {
+        query += ' LIMIT ?';
+        args.add(limit);
+      }
+
+      final List<Map<String, dynamic>> maps = await db.rawQuery(query, args);
+
+      return maps.map((map) => ScanHistoryModel.fromMap(map)).toList();
+    } catch (e) {
+      print('❌ Error getting scan history: $e');
+      return [];
+    }
+  }
+
+  /// Get scan history by ID
+  Future<ScanHistoryModel?> getScanHistoryById(String id) async {
+    try {
+      final db = await database;
+      final List<Map<String, dynamic>> maps = await db.query(
+        'scan_history',
+        where: 'id = ?',
+        whereArgs: [id],
+        limit: 1,
+      );
+
+      if (maps.isEmpty) return null;
+
+      return ScanHistoryModel.fromMap(maps.first);
+    } catch (e) {
+      print('❌ Error getting scan history: $e');
+      return null;
+    }
+  }
+
+  /// Delete scan history record
+  Future<bool> deleteScanHistory(String id) async {
+    try {
+      final db = await database;
+      final count = await db.delete(
+        'scan_history',
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+
+      print('✅ Scan history deleted: $id');
+      return count > 0;
+    } catch (e) {
+      print('❌ Error deleting scan history: $e');
+      return false;
+    }
+  }
+
+  /// Get total AI cost for a user
+  Future<double> getTotalAICost({
+    required String userId,
+    TransactionSource? source,
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {
+    try {
+      final db = await database;
+
+      String query = 'SELECT SUM(ai_processed) as total FROM scan_history WHERE user_id = ?';
+      List<dynamic> args = [userId];
+
+      if (source != null) {
+        query += ' AND source = ?';
+        args.add(source.name);
+      }
+
+      if (startDate != null) {
+        query += ' AND scan_date >= ?';
+        args.add(startDate.toIso8601String());
+      }
+
+      if (endDate != null) {
+        query += ' AND scan_date <= ?';
+        args.add(endDate.toIso8601String());
+      }
+
+      final result = await db.rawQuery(query, args);
+      final totalAI = Sqflite.firstIntValue(result) ?? 0;
+
+      return totalAI * 0.13; // ₹0.13 per AI call
+    } catch (e) {
+      print('❌ Error getting total AI cost: $e');
+      return 0.0;
+    }
+  }
+
+  /// Get scan statistics summary
+  Future<Map<String, dynamic>> getScanStatistics({
+    required String userId,
+  }) async {
+    try {
+      final db = await database;
+
+      final result = await db.rawQuery('''
+        SELECT
+          COUNT(*) as total_scans,
+          SUM(total_messages) as total_messages,
+          SUM(pattern_matched) as total_pattern_matched,
+          SUM(ai_processed) as total_ai_processed,
+          SUM(transactions_found) as total_transactions,
+          SUM(new_patterns_learned) as total_patterns_learned
+        FROM scan_history
+        WHERE user_id = ?
+      ''', [userId]);
+
+      if (result.isEmpty) {
+        return {
+          'totalScans': 0,
+          'totalMessages': 0,
+          'totalPatternMatched': 0,
+          'totalAIProcessed': 0,
+          'totalTransactions': 0,
+          'totalPatternsLearned': 0,
+          'totalCost': 0.0,
+          'totalSaved': 0.0,
+        };
+      }
+
+      final row = result.first;
+      final totalAI = (row['total_ai_processed'] as int?) ?? 0;
+      final totalPatternMatched = (row['total_pattern_matched'] as int?) ?? 0;
+      final totalCost = totalAI * 0.13;
+      final potentialCost = (totalAI + totalPatternMatched) * 0.13;
+      final totalSaved = potentialCost - totalCost;
+
+      return {
+        'totalScans': (row['total_scans'] as int?) ?? 0,
+        'totalMessages': (row['total_messages'] as int?) ?? 0,
+        'totalPatternMatched': totalPatternMatched,
+        'totalAIProcessed': totalAI,
+        'totalTransactions': (row['total_transactions'] as int?) ?? 0,
+        'totalPatternsLearned': (row['total_patterns_learned'] as int?) ?? 0,
+        'totalCost': totalCost,
+        'totalSaved': totalSaved,
+      };
+    } catch (e) {
+      print('❌ Error getting scan statistics: $e');
+      return {};
     }
   }
 

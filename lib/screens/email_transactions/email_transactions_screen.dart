@@ -2,12 +2,14 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:uuid/uuid.dart';
 import 'package:spendpal/services/gmail_service.dart';
 import 'package:spendpal/services/generic_transaction_parser_service.dart';
 import 'package:spendpal/services/local_db_service.dart';
 import 'package:spendpal/services/account_tracker_service.dart';
 import 'package:spendpal/services/transaction_display_service.dart';
 import 'package:spendpal/models/local_transaction_model.dart';
+import 'package:spendpal/models/scan_history_model.dart';
 import 'package:spendpal/theme/app_theme.dart';
 import 'package:spendpal/utils/currency_utils.dart';
 import 'package:spendpal/widgets/tracker_badge_widget.dart';
@@ -598,6 +600,28 @@ class _EmailTransactionsScreenState extends State<EmailTransactionsScreen> {
       // Update last sync time
       await GmailService.updateLastSyncTime();
 
+      // Save scan history for cost tracking
+      final scanHistory = ScanHistoryModel(
+        id: const Uuid().v4(),
+        userId: userId,
+        scanDate: DateTime.now(),
+        source: TransactionSource.email,
+        mode: ScanMode.ai, // Email always uses AI mode
+        daysScanned: _selectedDays,
+        rangeStart: startDate,
+        rangeEnd: DateTime.now(),
+        totalMessages: totalEmails,
+        filteredMessages: emailItems.length,
+        alreadyProcessed: totalEmails - emailItems.length,
+        patternMatched: 0, // Email parsing uses AI (patterns learned for future)
+        aiProcessed: emailItems.length,
+        transactionsFound: parsedTransactions.length,
+        newPatternsLearned: 0, // TODO: Track from parser
+      );
+
+      await LocalDBService.instance.insertScanHistory(scanHistory);
+      print('📝 Scan history saved: ₹${scanHistory.cost.toStringAsFixed(2)} (${emailItems.length} AI calls)');
+
       // Update tracker statistics
       print('\n📊 UPDATING TRACKER STATISTICS');
       print('───────────────────────────────────────────────────────');
@@ -808,6 +832,14 @@ class _EmailTransactionsScreenState extends State<EmailTransactionsScreen> {
         ),
         elevation: 0,
         actions: [
+          // Scan history
+          IconButton(
+            icon: const Icon(Icons.history),
+            tooltip: 'Scan History & Costs',
+            onPressed: () {
+              Navigator.pushNamed(context, '/scan_history');
+            },
+          ),
           // Processing statistics
           IconButton(
             icon: const Icon(Icons.analytics),

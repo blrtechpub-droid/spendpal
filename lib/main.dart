@@ -21,6 +21,7 @@ import 'screens/email_transactions/email_transactions_screen.dart';
 import 'screens/budget/budget_screen.dart';
 import 'screens/personal/sms_processing_stats_screen.dart';
 import 'screens/personal/processing_stats_screen.dart';
+import 'screens/personal/scan_history_screen.dart';
 import 'screens/settings/currency_selector_screen.dart';
 import 'models/local_transaction_model.dart';
 import 'theme/app_theme.dart';
@@ -127,6 +128,7 @@ class MyApp extends StatelessWidget {
               );
             },
             '/currency_selector': (context) => const CurrencySelectorScreen(),
+            '/scan_history': (context) => const ScanHistoryScreen(),
             '/asset_detail': (context) {
               final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
               return AssetDetailScreen(

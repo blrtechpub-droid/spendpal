@@ -981,7 +981,7 @@ class FriendHomeScreen extends StatelessWidget {
                           final category = data['category'] ?? 'Other';
                           final splitDetails = Map<String, dynamic>.from(data['splitDetails'] ?? {});
                           final timestamp = data['createdAt'] as Timestamp?;
-                          final userShare = splitDetails[currentUserId] as num? ?? 0.0;
+                          final userShare = (splitDetails[currentUserId] as num?)?.toDouble() ?? 0.0;
                           final date = timestamp?.toDate();
                           final groupId = data['groupId'] as String?;
 

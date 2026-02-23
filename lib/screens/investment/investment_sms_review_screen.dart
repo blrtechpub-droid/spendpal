@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:intl/intl.dart';
 import 'package:spendpal/services/investment_sms_parser_service.dart';
 import 'package:spendpal/theme/app_theme.dart';
 import 'package:spendpal/utils/currency_utils.dart';
