@@ -1,7 +1,10 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:spendpal/models/investment_asset.dart';
+import 'package:spendpal/models/instrument_cache_item.dart';
+import 'package:spendpal/services/instrument_cache_service.dart';
 
 class AddAssetScreen extends StatefulWidget {
   final InvestmentAsset? asset;
@@ -47,9 +50,16 @@ class _AddAssetScreenState extends State<AddAssetScreen> {
   bool _showCustomInterest = false;
   bool _showCustomTenure = false;
 
+  // Instrument cache state
+  bool _cacheAvailable = false;
+  Timer? _debounceTimer;
+  StreamSubscription<CacheDownloadProgress>? _progressSubscription;
+  CacheDownloadProgress? _downloadProgress;
+
   @override
   void initState() {
     super.initState();
+    _initInstrumentCache();
     if (widget.isEdit && widget.asset != null) {
       _nameController.text = widget.asset!.name;
       _symbolController.text = widget.asset!.symbol ?? '';
@@ -65,6 +75,69 @@ class _AddAssetScreenState extends State<AddAssetScreen> {
       _selectedPurity = widget.asset!.purity;
       _selectedMaturityDate = widget.asset!.maturityDate;
     }
+  }
+
+  void _initInstrumentCache() {
+    final cacheService = InstrumentCacheService.instance;
+
+    // Listen to download progress
+    _progressSubscription = cacheService.progressStream.listen((progress) {
+      if (mounted) {
+        setState(() {
+          _downloadProgress = progress;
+          if (progress.stage == 'done') {
+            _cacheAvailable = true;
+          }
+        });
+      }
+    });
+
+    // Check cache availability then trigger download if needed
+    cacheService.hasCacheData().then((hasData) {
+      if (mounted) {
+        setState(() => _cacheAvailable = hasData);
+      }
+    });
+    cacheService.ensureCacheReady();
+  }
+
+  /// Debounced search for instruments from cache
+  Future<List<InstrumentCacheItem>> _searchInstruments(String query) async {
+    if (query.trim().length < 2) return [];
+
+    // If cache not available, return empty (UI will use static fallback)
+    if (!_cacheAvailable) return [];
+
+    return InstrumentCacheService.instance.searchInstruments(
+      query: query,
+      type: _selectedAssetType,
+    );
+  }
+
+  /// Build fallback suggestions from static lists when cache is unavailable
+  List<InstrumentCacheItem> _getStaticSuggestions(String query) {
+    if (query.isEmpty) return [];
+
+    List<String> suggestions;
+    String type;
+
+    if (_selectedAssetType == 'equity') {
+      suggestions = _popularStocks;
+      type = 'equity';
+    } else if (_selectedAssetType == 'mutual_fund') {
+      suggestions = _popularMutualFunds;
+      type = 'mutual_fund';
+    } else if (_selectedAssetType == 'etf') {
+      suggestions = _popularETFs;
+      type = 'etf';
+    } else {
+      return [];
+    }
+
+    return suggestions
+        .where((s) => s.toLowerCase().contains(query.toLowerCase()))
+        .map((s) => InstrumentCacheItem(name: s, type: type))
+        .toList();
   }
 
   final List<Map<String, String>> _assetTypes = [
@@ -194,6 +267,8 @@ class _AddAssetScreenState extends State<AddAssetScreen> {
 
   @override
   void dispose() {
+    _debounceTimer?.cancel();
+    _progressSubscription?.cancel();
     _nameController.dispose();
     _symbolController.dispose();
     _schemeCodeController.dispose();
@@ -350,28 +425,107 @@ class _AddAssetScreenState extends State<AddAssetScreen> {
 
             const SizedBox(height: 16),
 
-            // Asset Name with Autocomplete
-            Autocomplete<String>(
-              optionsBuilder: (TextEditingValue textEditingValue) {
+            // Download progress indicator (shown during first cache download)
+            if (_downloadProgress != null &&
+                _downloadProgress!.stage != 'done' &&
+                _downloadProgress!.stage != 'error') ...[
+              LinearProgressIndicator(value: _downloadProgress!.progress),
+              Padding(
+                padding: const EdgeInsets.only(top: 4, bottom: 8),
+                child: Text(
+                  _downloadProgress!.message,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Colors.grey[600],
+                  ),
+                ),
+              ),
+            ],
+
+            // Asset Name with Autocomplete (cached instruments)
+            Autocomplete<InstrumentCacheItem>(
+              displayStringForOption: (item) => item.name,
+              optionsBuilder: (TextEditingValue textEditingValue) async {
                 if (textEditingValue.text.isEmpty) {
-                  return const Iterable<String>.empty();
+                  return const Iterable<InstrumentCacheItem>.empty();
                 }
 
-                List<String> suggestions = [];
-                if (_selectedAssetType == 'equity') {
-                  suggestions = _popularStocks;
-                } else if (_selectedAssetType == 'mutual_fund') {
-                  suggestions = _popularMutualFunds;
-                } else if (_selectedAssetType == 'etf') {
-                  suggestions = _popularETFs;
+                // For non-market asset types, no autocomplete
+                if (!['equity', 'mutual_fund', 'etf'].contains(_selectedAssetType)) {
+                  return const Iterable<InstrumentCacheItem>.empty();
                 }
 
-                return suggestions.where((String option) {
-                  return option.toLowerCase().contains(textEditingValue.text.toLowerCase());
+                final query = textEditingValue.text;
+
+                // Use a Completer with debounce for cached search
+                final completer = Completer<List<InstrumentCacheItem>>();
+                _debounceTimer?.cancel();
+                _debounceTimer = Timer(const Duration(milliseconds: 300), () async {
+                  try {
+                    // Try cached search first
+                    final cached = await _searchInstruments(query);
+                    if (cached.isNotEmpty) {
+                      completer.complete(cached);
+                    } else {
+                      // Fallback to static lists
+                      completer.complete(_getStaticSuggestions(query));
+                    }
+                  } catch (_) {
+                    completer.complete(_getStaticSuggestions(query));
+                  }
                 });
+
+                return completer.future;
               },
-              onSelected: (String selection) {
-                _nameController.text = selection;
+              onSelected: (InstrumentCacheItem selection) {
+                _nameController.text = selection.name;
+                // Auto-fill symbol and schemeCode
+                if (selection.symbol != null && selection.symbol!.isNotEmpty) {
+                  _symbolController.text = selection.symbol!;
+                }
+                if (selection.schemeCode != null && selection.schemeCode!.isNotEmpty) {
+                  _schemeCodeController.text = selection.schemeCode!;
+                }
+              },
+              optionsViewBuilder: (context, onSelected, options) {
+                return Align(
+                  alignment: Alignment.topLeft,
+                  child: Material(
+                    elevation: 4,
+                    borderRadius: BorderRadius.circular(8),
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxHeight: 300,
+                        maxWidth: MediaQuery.of(context).size.width - 32,
+                      ),
+                      child: ListView.builder(
+                        padding: EdgeInsets.zero,
+                        shrinkWrap: true,
+                        itemCount: options.length,
+                        itemBuilder: (context, index) {
+                          final item = options.elementAt(index);
+                          return ListTile(
+                            dense: true,
+                            title: Text(
+                              item.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            subtitle: Text(
+                              item.type == 'mutual_fund'
+                                  ? 'MF${item.schemeCode != null ? ' • ${item.schemeCode}' : ''}'
+                                  : '${item.type == 'etf' ? 'ETF' : 'Equity'}${item.symbol != null ? ' • ${item.symbol}' : ''}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[600],
+                              ),
+                            ),
+                            onTap: () => onSelected(item),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                );
               },
               fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
                 // Sync with our controller
@@ -400,7 +554,9 @@ class _AddAssetScreenState extends State<AddAssetScreen> {
                         : _selectedAssetType == 'gold'
                         ? 'e.g., Physical Gold 24K'
                         : 'e.g., My PPF Account',
-                    helperText: _selectedAssetType == 'equity'
+                    helperText: _cacheAvailable && ['equity', 'mutual_fund', 'etf'].contains(_selectedAssetType)
+                        ? 'Search from 10,000+ instruments'
+                        : _selectedAssetType == 'equity'
                         ? 'Type to see popular stocks'
                         : _selectedAssetType == 'mutual_fund'
                         ? 'Type to see popular funds'

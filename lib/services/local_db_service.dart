@@ -15,7 +15,7 @@ import 'encryption_service.dart';
 class LocalDBService {
   static Database? _database;
   static final _databaseName = 'spendpal_local.db';
-  static final _databaseVersion = 4; // Incremented for scan_history table
+  static final _databaseVersion = 5; // Incremented for instrument_cache table
 
   // Singleton
   LocalDBService._();
@@ -158,6 +158,31 @@ class LocalDBService {
     await db.execute('CREATE INDEX idx_scan_history_date ON scan_history(scan_date DESC)');
     await db.execute('CREATE INDEX idx_scan_history_source ON scan_history(source)');
 
+    // Instrument cache table (for MF/Stock/ETF autocomplete)
+    await db.execute('''
+      CREATE TABLE instrument_cache (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        name_lower TEXT NOT NULL,
+        type TEXT NOT NULL,
+        symbol TEXT,
+        scheme_code TEXT,
+        isin TEXT
+      )
+    ''');
+    await db.execute('CREATE INDEX idx_instrument_name_lower ON instrument_cache(name_lower)');
+    await db.execute('CREATE INDEX idx_instrument_type ON instrument_cache(type)');
+    await db.execute('CREATE INDEX idx_instrument_symbol ON instrument_cache(symbol)');
+
+    // Cache metadata table (TTL tracking)
+    await db.execute('''
+      CREATE TABLE cache_metadata (
+        cache_key TEXT PRIMARY KEY,
+        last_updated TEXT NOT NULL,
+        item_count INTEGER DEFAULT 0
+      )
+    ''');
+
     print('✅ Database tables created successfully');
   }
 
@@ -244,6 +269,36 @@ class LocalDBService {
       await db.execute('CREATE INDEX idx_scan_history_source ON scan_history(source)');
 
       print('✅ Scan history table added successfully');
+    }
+
+    // Migration from v4 to v5: Add instrument_cache and cache_metadata tables
+    if (oldVersion < 5) {
+      print('📝 Adding instrument_cache and cache_metadata tables...');
+
+      await db.execute('''
+        CREATE TABLE instrument_cache (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL,
+          name_lower TEXT NOT NULL,
+          type TEXT NOT NULL,
+          symbol TEXT,
+          scheme_code TEXT,
+          isin TEXT
+        )
+      ''');
+      await db.execute('CREATE INDEX idx_instrument_name_lower ON instrument_cache(name_lower)');
+      await db.execute('CREATE INDEX idx_instrument_type ON instrument_cache(type)');
+      await db.execute('CREATE INDEX idx_instrument_symbol ON instrument_cache(symbol)');
+
+      await db.execute('''
+        CREATE TABLE cache_metadata (
+          cache_key TEXT PRIMARY KEY,
+          last_updated TEXT NOT NULL,
+          item_count INTEGER DEFAULT 0
+        )
+      ''');
+
+      print('✅ Instrument cache tables added successfully');
     }
   }
 
